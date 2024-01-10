@@ -9,7 +9,6 @@ pub fn parse_bare_key<'a>(text: &mut Text<'a>) -> Result<Span<'a>, Error> {
 
     if let Some(equals_idx) = key.find('=') {
         key.end = equals_idx - 1;
-        println!("{key:?}");
         key.trim();
 
         if key.is_empty() {

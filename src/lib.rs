@@ -23,10 +23,10 @@ impl<'a> TOML<'a> {
         let mut values = HashMap::new();
 
         while text.idx < text.len() - 1 {
-            println!(
-                "Main loop is at: |{}|",
-                text.byte(text.idx).unwrap().to_owned() as char
-            );
+            // println!(
+            //     "Main loop is at: |{}|",
+            //     text.byte(text.idx).unwrap().to_owned() as char
+            // );
             match text.byte(text.idx).unwrap() {
                 // Whitespace
                 b' ' | b'\n' | b'\r' => text.idx += 1,
@@ -110,19 +110,6 @@ mod crate_prelude {
 mod tests {
     use super::*;
 
-    impl<'a> TOML<'a> {
-        #[inline]
-        pub fn assert_value(&self, key: &str, expected_value: Value<'_>) {
-            assert_eq!(*self.get(key).unwrap(), expected_value);
-        }
-        #[inline]
-        pub fn assert_values(&self, expected_values: Vec<(&str, Value<'_>)>) {
-            for (key, expected_value) in expected_values {
-                self.assert_value(key, expected_value);
-            }
-        }
-    }
-
     /// Test that boml can parse booleans and bare keys.
     #[test]
     fn bools_and_bare_keys() {
@@ -153,12 +140,50 @@ mod tests {
         ]);
     }
 
-    /// Test that boml works with CRLF files.
+    /// Test that boml can parse literal strings and multiline literal strings.
     #[test]
-    fn crlf() {
-        let toml_source = concat!("val1 = true\r\n", "val2 = false");
+    fn literal_strings() {
+        let single = "Me when I have to write a demo sentence to test my incredible TOML parser but dunno what to say";
+        let multi = "Bruhhhh I gotta write\n*another*\ndemo sentence???\n:(";
+        let toml_source = format!("single = '{single}'\n") + &format!("multi = '''{multi}'''");
+        let toml = TOML::parse(&toml_source).unwrap();
+        toml.assert_values(vec![
+            ("single", Value::String(single)),
+            ("multi", Value::String(multi)),
+        ]);
+    }
+
+    /// Test that boml works with weird formats - CRLF, weird spacings, etc.
+    #[test]
+    fn weird_formats() {
+        let toml_source = concat!(
+            "val1 = true\r\n",
+            "val2=      false",
+            "\n\r\n\r\n\n",
+            "val3  =true\n",
+            "val4=false\n",
+            "val5 = true      "
+        );
         let toml = TOML::new(toml_source).unwrap();
-        assert_eq!(*toml.get("val1").unwrap(), Value::Boolean(true));
-        assert_eq!(*toml.get("val2").unwrap(), Value::Boolean(false));
+        toml.assert_values(vec![
+            ("val1", Value::Boolean(true)),
+            ("val2", Value::Boolean(false)),
+            ("val3", Value::Boolean(true)),
+            ("val4", Value::Boolean(false)),
+            ("val5", Value::Boolean(true)),
+        ]);
+    }
+
+    impl<'a> TOML<'a> {
+        #[inline]
+        pub fn assert_value(&self, key: &str, expected_value: Value<'_>) {
+            assert_eq!(*self.get(key).unwrap(), expected_value);
+        }
+        #[inline]
+        pub fn assert_values(&self, expected_values: Vec<(&str, Value<'_>)>) {
+            for (key, expected_value) in expected_values {
+                self.assert_value(key, expected_value);
+            }
+        }
     }
 }

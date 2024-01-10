@@ -16,40 +16,33 @@ pub fn try_parse_string<'a>(
     let last = chars.next_back().unwrap();
 
     if value.len() >= 6 {
-        let second = chars.next().unwrap();
-        let second_last = chars.next_back().unwrap();
-        let third = chars.next().unwrap();
-        let third_last = chars.next_back().unwrap();
+        if &value.as_str()[0..3] == "'''" {
+            let snippet = text.excerpt(value.start + 3..);
+            let Some(end_idx) = snippet.as_str().find("'''").map(|idx| idx + snippet.start) else {
+                return Some(Err(Error {
+                    start: value.start,
+                    end: value.end,
+                    kind: ErrorKind::UnclosedStringLiteral,
+                }));
+            };
 
-        if first == '\'' && second == '\'' && third == '\'' {
-            if last == '\'' && second_last == '\'' && third_last == '\'' {
-                todo!("Multiline literal strings");
-            } else {
-                return Some(Err(Error {
-                    start: value.start,
-                    end: value.end,
-                    kind: ErrorKind::UnclosedStringLiteral,
-                }));
-            }
-        } else if first == '"' && second == '"' && third == '"' {
-            if last == '"' && second_last == '"' && third_last == '"' {
-                todo!("Multiline strings");
-            } else {
-                return Some(Err(Error {
-                    start: value.start,
-                    end: value.end,
-                    kind: ErrorKind::UnclosedStringLiteral,
-                }));
-            }
+            let value = Span {
+                start: value.start + 3,
+                end: end_idx - 1,
+                source: text.text,
+            };
+            text.idx = value.end + 3;
+
+            return Some(Ok(Value::String(value.to_str())));
+        } else if &value.as_str()[0..3] == "\"\"\"" {
+            todo!("Multiline strings");
         }
     }
 
     if first == '\'' {
         if last == '\'' {
             text.idx = value.end;
-            Some(Ok(Value::String(
-                &text.text[value.start + 1..value.end - 1],
-            )))
+            Some(Ok(Value::String(&text.text[value.start + 1..value.end])))
         } else {
             Some(Err(Error {
                 start: value.start,
