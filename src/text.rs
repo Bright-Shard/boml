@@ -40,8 +40,8 @@ impl<'a: 'b, 'b> Text<'a> {
         }
     }
 
-    pub fn byte(&self, idx: usize) -> Option<&u8> {
-        self.text.as_bytes().get(idx)
+    pub fn byte(&self, idx: usize) -> Option<u8> {
+        self.text.as_bytes().get(idx).copied()
     }
 }
 
@@ -74,8 +74,8 @@ impl<'a: 'b, 'b> Span<'a> {
 
     /// Finds the location of a character in this span, and returns its location,
     /// relative to the entire text this span comes from.
-    pub fn find(&self, val: char) -> Option<usize> {
-        for (idx, char_) in self.as_str().char_indices() {
+    pub fn find(&self, val: u8) -> Option<usize> {
+        for (idx, char_) in self.as_str().bytes().enumerate() {
             if char_ == val {
                 return Some(idx + self.start);
             }

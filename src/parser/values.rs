@@ -1,4 +1,4 @@
-use crate::crate_prelude::*;
+use {crate::crate_prelude::*, std::num::IntErrorKind};
 
 /// Tries to parse a string literal. This can be a literal string, regular string,
 /// multiline string, or multiline literal string. Returns `None` if no string was detected,
@@ -11,9 +11,9 @@ pub fn try_parse_string<'a>(
         return None;
     }
 
-    let mut chars = value.as_str().chars();
-    let first = chars.next().unwrap();
-    let last = chars.next_back().unwrap();
+    let chars = value.as_str().as_bytes();
+    let first = chars[0];
+    let last = chars[chars.len() - 1];
 
     if value.len() >= 6 {
         if &value.as_str()[0..3] == "'''" {
@@ -39,8 +39,8 @@ pub fn try_parse_string<'a>(
         }
     }
 
-    if first == '\'' {
-        if last == '\'' {
+    if first == b'\'' {
+        if last == b'\'' {
             text.idx = value.end;
             Some(Ok(Value::String(&text.text[value.start + 1..value.end])))
         } else {
@@ -50,8 +50,8 @@ pub fn try_parse_string<'a>(
                 kind: ErrorKind::UnclosedStringLiteral,
             }))
         }
-    } else if first == '"' {
-        if last == '"' {
+    } else if first == b'"' {
+        if last == b'"' {
             todo!("Regular strings - need to add escape characters");
         } else {
             Some(Err(Error {
@@ -76,5 +76,83 @@ pub fn try_parse_bool<'a>(text: &mut Text<'a>, value: &Span<'_>) -> Option<Value
         Some(Value::Boolean(false))
     } else {
         None
+    }
+}
+
+#[derive(PartialEq)]
+enum NumberSign {
+    Positive,
+    Negative,
+}
+
+pub fn try_parse_int<'a>(
+    text: &mut Text<'a>,
+    value: &mut Span<'_>,
+) -> Option<Result<Value<'a>, Error>> {
+    let sign = match text.byte(value.start).unwrap() {
+        b'+' => {
+            value.start += 1;
+            Some(NumberSign::Positive)
+        }
+        b'-' => {
+            value.start += 1;
+            Some(NumberSign::Negative)
+        }
+        _ => None,
+    };
+    let radix = match text.byte(value.start) {
+        Some(b'0') => match text.byte(value.start + 1) {
+            Some(b'x') => {
+                value.start += 2;
+                16
+            }
+            Some(b'o') => {
+                value.start += 2;
+                8
+            }
+            Some(b'b') => {
+                value.start += 2;
+                2
+            }
+            Some(_) => {
+                return Some(Err(Error {
+                    start: value.start,
+                    end: value.start + 1,
+                    kind: ErrorKind::NumberHasInvalidBaseOrLeadingZero,
+                }))
+            }
+            None => 10,
+        },
+        Some(_) => 10,
+        // This can only be reached if there was a sign with nothing after it
+        // The `parse_value` fn errors if the value is empty, so the only way to get `None`
+        // here is if the sign check above increments `value.start`, which would mean there's
+        // a sign but nothing after it.
+        None => {
+            return Some(Err(Error {
+                start: value.start - 1,
+                end: value.end,
+                kind: ErrorKind::InvalidNumber,
+            }))
+        }
+    };
+
+    match i64::from_str_radix(value.as_str(), radix) {
+        Ok(mut num) => {
+            if sign == Some(NumberSign::Negative) {
+                num *= -1;
+            }
+            text.idx = value.end;
+            Some(Ok(Value::Integer(num)))
+        }
+        Err(e) => match *e.kind() {
+            IntErrorKind::NegOverflow | IntErrorKind::PosOverflow => Some(Err(Error {
+                start: value.start,
+                end: value.end,
+                kind: ErrorKind::NumberTooLarge,
+            })),
+            IntErrorKind::InvalidDigit => None,
+            _ => unreachable!(),
+        },
     }
 }

@@ -96,6 +96,13 @@ pub enum ErrorKind {
     UnrecognisedValue,
     /// The same key was used twice.
     ReusedKey,
+    /// A number was too big to fit in an i64. This will also be thrown
+    /// for numbers that are "too little", ie, are too negative to fit.
+    NumberTooLarge,
+    /// A number has an invalid base or a leading zero.
+    NumberHasInvalidBaseOrLeadingZero,
+    /// A number is malformed/not parseable.
+    InvalidNumber,
 }
 
 mod crate_prelude {
@@ -113,12 +120,20 @@ mod tests {
     /// Test that boml can parse booleans and bare keys.
     #[test]
     fn bools_and_bare_keys() {
-        let toml_source = concat!("val1 = true\n", "val2 = false\n", "5678 = true");
+        let toml_source = concat!(
+            "val1 = true\n",
+            "val2 = false\n",
+            "5678 = true\n",
+            "dash-ed = true\n",
+            "under_score = true\n"
+        );
         let toml = TOML::parse(toml_source).unwrap();
         toml.assert_values(vec![
             ("val1", Value::Boolean(true)),
             ("val2", Value::Boolean(false)),
             ("5678", Value::Boolean(true)),
+            ("dash-ed", Value::Boolean(true)),
+            ("under_score", Value::Boolean(true)),
         ]);
     }
 
@@ -153,6 +168,30 @@ mod tests {
         ]);
     }
 
+    /// Test that boml can parse integers.
+    #[test]
+    fn integers() {
+        let toml_source = concat!(
+            "hex = 0x10\n",
+            "decimal = 10\n",
+            "octal = 0o10\n",
+            "binary = 0b10\n",
+            "neghex = -0x10\n",
+            "posoctal = +0o10\n",
+            "lmao = -0\n"
+        );
+        let toml = TOML::parse(toml_source).unwrap();
+        toml.assert_values(vec![
+            ("hex", Value::Integer(16)),
+            ("decimal", Value::Integer(10)),
+            ("octal", Value::Integer(8)),
+            ("binary", Value::Integer(2)),
+            ("neghex", Value::Integer(-16)),
+            ("posoctal", Value::Integer(8)),
+            ("lmao", Value::Integer(0)),
+        ]);
+    }
+
     /// Test that boml works with weird formats - CRLF, weird spacings, etc.
     #[test]
     fn weird_formats() {
@@ -183,6 +222,7 @@ mod tests {
         pub fn assert_values(&self, expected_values: Vec<(&str, Value<'_>)>) {
             for (key, expected_value) in expected_values {
                 self.assert_value(key, expected_value);
+                // println!("Asserted value");
             }
         }
     }
