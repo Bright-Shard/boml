@@ -20,9 +20,9 @@ parse `Cargo.toml` and other similar files.
   - [ ] String
     - [ ] Basic string
     - [ ] Basic multiline string
-    - [ ] Literal string
-    - [ ] Literal multiline string
-  - [ ] Integer
+    - [x] Literal string
+    - [x] Literal multiline string
+  - [x] Integer
   - [ ] Float
   - [x] Boolean
   - [ ] Time (future)
