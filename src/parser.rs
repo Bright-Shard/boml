@@ -106,6 +106,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlData<'a>, Error> {
     }
 
     let Some(value) = values::try_parse_bool(text, &value_src)
+        .or_else(|| values::try_parse_float(text, &mut value_src))
         .map(Ok)
         .or_else(|| values::try_parse_int(text, &mut value_src))
         .or_else(|| values::try_parse_string(text, &value_src))

@@ -79,26 +79,20 @@ pub fn try_parse_bool<'a>(text: &mut Text<'a>, value: &Span<'_>) -> Option<Value
     }
 }
 
-#[derive(PartialEq)]
-enum NumberSign {
-    Positive,
-    Negative,
-}
-
 pub fn try_parse_int<'a>(
     text: &mut Text<'a>,
     value: &mut Span<'_>,
 ) -> Option<Result<Value<'a>, Error>> {
-    let sign = match text.byte(value.start).unwrap() {
-        b'+' => {
-            value.start += 1;
-            Some(NumberSign::Positive)
-        }
+    let negative = match text.byte(value.start).unwrap() {
         b'-' => {
             value.start += 1;
-            Some(NumberSign::Negative)
+            true
         }
-        _ => None,
+        b'+' => {
+            value.start += 1;
+            false
+        }
+        _ => false,
     };
     let radix = match text.byte(value.start) {
         Some(b'0') => match text.byte(value.start + 1) {
@@ -139,7 +133,7 @@ pub fn try_parse_int<'a>(
 
     match i64::from_str_radix(value.as_str(), radix) {
         Ok(mut num) => {
-            if sign == Some(NumberSign::Negative) {
+            if negative {
                 num *= -1;
             }
             text.idx = value.end;
@@ -154,5 +148,30 @@ pub fn try_parse_int<'a>(
             IntErrorKind::InvalidDigit => None,
             _ => unreachable!(),
         },
+    }
+}
+
+pub fn try_parse_float<'a>(text: &mut Text<'a>, value: &mut Span<'_>) -> Option<Value<'a>> {
+    let negative = match text.byte(value.start).unwrap() {
+        b'-' => {
+            value.start += 1;
+            true
+        }
+        b'+' => {
+            value.start += 1;
+            false
+        }
+        _ => false,
+    };
+
+    match value.as_str().parse::<f64>() {
+        Ok(mut num) => {
+            if negative {
+                num *= -1.0;
+            }
+            text.idx = value.end;
+            Some(Value::Float(num))
+        }
+        Err(_) => None,
     }
 }

@@ -192,6 +192,37 @@ mod tests {
         ]);
     }
 
+    /// Test that boml can parse floats.
+    #[test]
+    fn floats() {
+        let toml_source = concat!(
+            "fractional = 0.345\n",
+            "exponential = 4e2\n",
+            "exponential_neg = 4e-2\n",
+            "exponential_pos = 4e+2\n",
+            "pos_fractional = +0.567\n",
+            "neg_fractional = -.123\n",
+            "capital_exponential = 2E2\n",
+            "combined = 7.27e2\n"
+        );
+        let toml = TOML::parse(toml_source).unwrap();
+        toml.assert_values(
+            vec![
+                ("fractional", 0.345),
+                ("exponential", 4e2),
+                ("exponential_neg", 4e-2),
+                ("exponential_pos", 4e2),
+                ("pos_fractional", 0.567),
+                ("neg_fractional", -0.123),
+                ("capital_exponential", 2e2),
+                ("combined", 727.0),
+            ]
+            .into_iter()
+            .map(|(key, val)| (key, Value::Float(val)))
+            .collect(),
+        );
+    }
+
     /// Test that boml works with weird formats - CRLF, weird spacings, etc.
     #[test]
     fn weird_formats() {

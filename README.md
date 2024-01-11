@@ -23,7 +23,7 @@ parse `Cargo.toml` and other similar files.
     - [x] Literal string
     - [x] Literal multiline string
   - [x] Integer
-  - [ ] Float
+  - [x] Float
   - [x] Boolean
   - [ ] Time (future)
     - [ ] Local Date-Time
