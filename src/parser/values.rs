@@ -152,26 +152,14 @@ pub fn try_parse_int<'a>(
 }
 
 pub fn try_parse_float<'a>(text: &mut Text<'a>, value: &mut Span<'_>) -> Option<Value<'a>> {
-    let negative = match text.byte(value.start).unwrap() {
-        b'-' => {
-            value.start += 1;
-            true
-        }
-        b'+' => {
-            value.start += 1;
-            false
-        }
-        _ => false,
-    };
-
-    match value.as_str().parse::<f64>() {
-        Ok(mut num) => {
-            if negative {
-                num *= -1.0;
-            }
+    match value.as_str().parse::<f64>().map(Value::Float) {
+        Ok(num) => {
             text.idx = value.end;
-            Some(Value::Float(num))
+            Some(num)
         }
+        // Rust currently doesn't give us information about why a parse failed. The error enum
+        // contains 2 variants - 1 for an empty string and 1 for an invalid float. So we can't
+        // really tell why the parse failed.
         Err(_) => None,
     }
 }
