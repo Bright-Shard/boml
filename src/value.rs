@@ -2,7 +2,8 @@ use {crate::crate_prelude::*, std::collections::HashMap};
 
 #[derive(Debug, PartialEq)]
 pub enum Value<'a> {
-    String(&'a str),
+    BasicString(String),
+    LiteralString(&'a str),
     Integer(i64),
     Float(f64),
     Boolean(bool),

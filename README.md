@@ -17,9 +17,9 @@ parse `Cargo.toml` and other similar files.
   - [x] Quoted keys
   - [ ] Dotted keys
 - [ ] Values
-  - [ ] String
-    - [ ] Basic string
-    - [ ] Basic multiline string
+  - [x] String
+    - [x] Basic string
+    - [x] Basic multiline string
     - [x] Literal string
     - [x] Literal multiline string
   - [x] Integer
@@ -35,6 +35,15 @@ parse `Cargo.toml` and other similar files.
   - [ ] Inline Table
   - [ ] Array of Tables
   - [ ] Array of Inline Tables (future)
+
+# Quirks
+
+Basic strings with escapes are copied to some extent, because the escapes require modifying the strings themeslves,
+which requires a new string. To show this, the `Value::BasicString` type stores a `String`, while `Value::LiteralString`
+stores a `&str`.
+
+To avoid copying them, basic strings that don't contain escapes are stored as literal strings - eg, they're stored as
+`Value::LiteralString` instead of `Value::BasicString`, even if they're technically basic strings..
 
 # Whatsitstandfor
 

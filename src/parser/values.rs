@@ -33,16 +33,38 @@ pub fn try_parse_string<'a>(
             };
             text.idx = value.end + 3;
 
-            return Some(Ok(Value::String(value.to_str())));
+            return Some(Ok(Value::LiteralString(value.to_str())));
         } else if &value.as_str()[0..3] == "\"\"\"" {
-            todo!("Multiline strings");
+            let snippet = text.excerpt(value.start + 3..);
+            let Some(end_idx) = snippet
+                .as_str()
+                .find("\"\"\"")
+                .map(|idx| idx + snippet.start)
+            else {
+                return Some(Err(Error {
+                    start: value.start,
+                    end: value.end,
+                    kind: ErrorKind::UnclosedStringLiteral,
+                }));
+            };
+
+            let value = Span {
+                start: value.start + 3,
+                end: end_idx - 1,
+                source: text.text,
+            };
+            text.idx = value.end + 3;
+            return handle_basic_string_escapes(text, value.as_str())
+                .or(Some(Ok(Value::LiteralString(value.to_str()))));
         }
     }
 
     if first == b'\'' {
         if last == b'\'' {
             text.idx = value.end;
-            Some(Ok(Value::String(&text.text[value.start + 1..value.end])))
+            Some(Ok(Value::LiteralString(
+                &text.text[value.start + 1..value.end],
+            )))
         } else {
             Some(Err(Error {
                 start: value.start,
@@ -52,7 +74,14 @@ pub fn try_parse_string<'a>(
         }
     } else if first == b'"' {
         if last == b'"' {
-            todo!("Regular strings - need to add escape characters");
+            let str_span = Span {
+                start: value.start + 1,
+                end: value.end - 1,
+                source: text.text,
+            }
+            .to_str();
+            text.idx = value.end;
+            handle_basic_string_escapes(text, str_span).or(Some(Ok(Value::LiteralString(str_span))))
         } else {
             Some(Err(Error {
                 start: value.start,
@@ -60,6 +89,104 @@ pub fn try_parse_string<'a>(
                 kind: ErrorKind::UnclosedStringLiteral,
             }))
         }
+    } else {
+        None
+    }
+}
+
+fn handle_basic_string_escapes<'a>(
+    text: &mut Text<'a>,
+    string: &str,
+) -> Option<Result<Value<'a>, Error>> {
+    if string.contains('\\') {
+        let mut neostring = String::with_capacity(string.len());
+        let mut last_idx_copy = 0;
+        let mut bytes = string.bytes().enumerate().peekable();
+
+        while let Some((idx, byte)) = bytes.next() {
+            if byte == b'\\' {
+                let Some((_, next_byte)) = bytes.next() else {
+                    return Some(Err(Error {
+                        start: idx + 1,
+                        end: idx + 2,
+                        kind: ErrorKind::UnknownEscapeSequence,
+                    }));
+                };
+                let replace_with = match next_byte {
+                    b'b' => '\u{0008}',
+                    b't' => '\t',
+                    b'n' => '\n',
+                    b'f' => '\u{000C}',
+                    b'r' => '\r',
+                    b'"' => '"',
+                    b'\\' => '\\',
+                    b'u' => {
+                        let Some(char_) = text
+                            .excerpt(idx + 2..idx + 6)
+                            .as_str()
+                            .parse()
+                            .ok()
+                            .and_then(char::from_u32)
+                        else {
+                            return Some(Err(Error {
+                                start: idx,
+                                end: idx + 5,
+                                kind: ErrorKind::UnknownUnicodeScalar,
+                            }));
+                        };
+
+                        char_
+                    }
+                    b'U' => {
+                        let Some(char_) = text
+                            .excerpt(idx + 2..idx + 10)
+                            .as_str()
+                            .parse()
+                            .ok()
+                            .and_then(char::from_u32)
+                        else {
+                            return Some(Err(Error {
+                                start: idx,
+                                end: idx + 9,
+                                kind: ErrorKind::UnknownUnicodeScalar,
+                            }));
+                        };
+
+                        char_
+                    }
+                    c if c.is_ascii_whitespace() => {
+                        neostring.push_str(&string[last_idx_copy..idx]);
+                        last_idx_copy = idx + 1;
+                        while let Some((_, byte)) = bytes.peek() {
+                            last_idx_copy += 1;
+
+                            if !byte.is_ascii_whitespace() {
+                                break;
+                            }
+
+                            bytes.next();
+                        }
+                        continue;
+                    }
+                    _ => {
+                        return Some(Err(Error {
+                            start: idx,
+                            end: idx + 1,
+                            kind: ErrorKind::UnknownEscapeSequence,
+                        }))
+                    }
+                };
+
+                neostring.push_str(&string[last_idx_copy..idx]);
+                neostring.push(replace_with);
+                last_idx_copy = idx + 2;
+            }
+        }
+        if last_idx_copy < string.len() {
+            neostring.push_str(&string[last_idx_copy..]);
+        }
+
+        Some(Ok(Value::BasicString(neostring)))
     } else {
         None
     }

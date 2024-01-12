@@ -103,6 +103,10 @@ pub enum ErrorKind {
     NumberHasInvalidBaseOrLeadingZero,
     /// A number is malformed/not parseable.
     InvalidNumber,
+    /// A basic string has an unknown escape sequence.
+    UnknownEscapeSequence,
+    /// A unicode escape in a basic string has an unknown unicode scalar value.
+    UnknownUnicodeScalar,
 }
 
 mod crate_prelude {
@@ -163,8 +167,38 @@ mod tests {
         let toml_source = format!("single = '{single}'\n") + &format!("multi = '''{multi}'''");
         let toml = TOML::parse(&toml_source).unwrap();
         toml.assert_values(vec![
-            ("single", Value::String(single)),
-            ("multi", Value::String(multi)),
+            ("single", Value::LiteralString(single)),
+            ("multi", Value::LiteralString(multi)),
+        ]);
+    }
+
+    /// Test that boml can parse basic strings and multiline basic strings.
+    #[test]
+    fn basic_strings() {
+        let toml_source = concat!(
+            "normal = \"normality 100\"\n",
+            r#"quotes = "Bro I got \"quotes\"" "#,
+            "\n",
+            r#"escapes = "\t\n\r\\" "#,
+            "\n",
+            "multi = \"\"\"me when\\n",
+            "i do multiline\\r pretty neat",
+            "\"\"\"\n",
+            "whitespace = \"\"\"white\\    \n\n\n\r\n    space\"\"\""
+        );
+        let toml = TOML::parse(toml_source).unwrap();
+        toml.assert_values(vec![
+            ("normal", Value::LiteralString("normality 100")),
+            (
+                "quotes",
+                Value::BasicString(String::from("Bro I got \"quotes\"")),
+            ),
+            ("escapes", Value::BasicString(String::from("\t\n\r\\"))),
+            (
+                "multi",
+                Value::BasicString(String::from("me when\ni do multiline\r pretty neat")),
+            ),
+            ("whitespace", Value::BasicString(String::from("whitespace"))),
         ]);
     }
 
