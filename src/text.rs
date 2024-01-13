@@ -45,7 +45,7 @@ impl<'a: 'b, 'b> Text<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Span<'a> {
     /// Inclusive start of this span of text.
     pub start: usize,

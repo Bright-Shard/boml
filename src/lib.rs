@@ -1,18 +1,18 @@
 pub mod parser;
+pub mod table;
 pub mod text;
 pub mod value;
 
 use {
+    crate_prelude::*,
     std::{collections::HashMap, ops::Deref},
-    text::Text,
-    value::Value,
 };
 
-pub struct TOML<'a> {
+pub struct Toml<'a> {
     pub text: &'a str,
-    values: HashMap<&'a str, Value<'a>>,
+    table: Table<'a>,
 }
-impl<'a> TOML<'a> {
+impl<'a> Toml<'a> {
     #[inline(always)]
     pub fn new(text: &'a str) -> Result<Self, Error> {
         Self::parse(text)
@@ -54,18 +54,26 @@ impl<'a> TOML<'a> {
         }
 
         let values = values.into_iter().map(|(k, v)| (k, v.value)).collect();
+        let table = Table {
+            map: values,
+            source: Span {
+                start: 0,
+                end: text.len(),
+                source: text.text,
+            },
+        };
 
         Ok(Self {
             text: text.text,
-            values,
+            table,
         })
     }
 }
-impl<'a> Deref for TOML<'a> {
-    type Target = HashMap<&'a str, Value<'a>>;
+impl<'a> Deref for Toml<'a> {
+    type Target = Table<'a>;
 
     fn deref(&self) -> &Self::Target {
-        &self.values
+        &self.table
     }
 }
 
@@ -111,6 +119,7 @@ pub enum ErrorKind {
 
 mod crate_prelude {
     pub use super::{
+        table::Table,
         text::{Span, Text},
         value::{TomlData, Value},
         Error, ErrorKind,
@@ -131,7 +140,7 @@ mod tests {
             "dash-ed = true\n",
             "under_score = true\n"
         );
-        let toml = TOML::parse(toml_source).unwrap();
+        let toml = Toml::parse(toml_source).unwrap();
         toml.assert_values(vec![
             ("val1", Value::Boolean(true)),
             ("val2", Value::Boolean(false)),
@@ -150,7 +159,7 @@ mod tests {
             "\"quoted 'key'\" = true\n",
             "'quoted \"key\" 2' = true\n",
         );
-        let toml = TOML::parse(toml_source).unwrap();
+        let toml = Toml::parse(toml_source).unwrap();
         toml.assert_values(vec![
             ("val0.1.1", Value::Boolean(true)),
             ("ʎǝʞ", Value::Boolean(true)),
@@ -165,7 +174,7 @@ mod tests {
         let single = "Me when I have to write a demo sentence to test my incredible TOML parser but dunno what to say";
         let multi = "Bruhhhh I gotta write\n*another*\ndemo sentence???\n:(";
         let toml_source = format!("single = '{single}'\n") + &format!("multi = '''{multi}'''");
-        let toml = TOML::parse(&toml_source).unwrap();
+        let toml = Toml::parse(&toml_source).unwrap();
         toml.assert_values(vec![
             ("single", Value::LiteralString(single)),
             ("multi", Value::LiteralString(multi)),
@@ -186,7 +195,7 @@ mod tests {
             "\"\"\"\n",
             "whitespace = \"\"\"white\\    \n\n\n\r\n    space\"\"\""
         );
-        let toml = TOML::parse(toml_source).unwrap();
+        let toml = Toml::parse(toml_source).unwrap();
         toml.assert_values(vec![
             ("normal", Value::LiteralString("normality 100")),
             (
@@ -214,7 +223,7 @@ mod tests {
             "posoctal = +0o10\n",
             "lmao = -0\n"
         );
-        let toml = TOML::parse(toml_source).unwrap();
+        let toml = Toml::parse(toml_source).unwrap();
         toml.assert_values(vec![
             ("hex", Value::Integer(16)),
             ("decimal", Value::Integer(10)),
@@ -239,7 +248,7 @@ mod tests {
             "capital_exponential = 2E2\n",
             "combined = 7.27e2\n"
         );
-        let toml = TOML::parse(toml_source).unwrap();
+        let toml = Toml::parse(toml_source).unwrap();
         toml.assert_values(
             vec![
                 ("fractional", 0.345),
@@ -268,7 +277,7 @@ mod tests {
             "val4=false\n",
             "val5 = true      "
         );
-        let toml = TOML::new(toml_source).unwrap();
+        let toml = Toml::new(toml_source).unwrap();
         toml.assert_values(vec![
             ("val1", Value::Boolean(true)),
             ("val2", Value::Boolean(false)),
@@ -278,7 +287,7 @@ mod tests {
         ]);
     }
 
-    impl<'a> TOML<'a> {
+    impl<'a> Toml<'a> {
         #[inline]
         pub fn assert_value(&self, key: &str, expected_value: Value<'_>) {
             assert_eq!(*self.get(key).unwrap(), expected_value);
