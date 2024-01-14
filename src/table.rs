@@ -89,6 +89,20 @@ impl<'a> Table<'a> {
             }
         }
     }
+
+    /// Gets the value for a key, if that value is an array.
+    pub fn get_array(&self, key: &str) -> Result<&Vec<TomlValue<'a>>, FetchError<'_, 'a>> {
+        match self.get(key) {
+            None => Err(FetchError::InvalidKey),
+            Some(val) => {
+                if let TomlValue::Array(array) = val {
+                    Ok(array)
+                } else {
+                    Err(FetchError::TypeMismatch(val, val.ty()))
+                }
+            }
+        }
+    }
 }
 
 /// Errors for the `get_<type>` methods in [`Table`].

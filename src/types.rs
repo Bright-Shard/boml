@@ -12,7 +12,7 @@ pub enum TomlValue<'a> {
     LocalDateTime,
     LocalDate,
     LocalTime,
-    Array(Vec<&'a Self>),
+    Array(Vec<Self>),
     Table(Table<'a>),
 }
 impl<'a> TomlValue<'a> {
@@ -28,6 +28,43 @@ impl<'a> TomlValue<'a> {
             Self::LocalTime => ValueType::LocalTime,
             Self::Array(_) => ValueType::Array,
             Self::Table(_) => ValueType::Table,
+        }
+    }
+
+    pub fn string(&self) -> Option<&TomlString<'a>> {
+        match self {
+            Self::String(string) => Some(string),
+            _ => None,
+        }
+    }
+    pub fn integer(&self) -> Option<i64> {
+        match self {
+            Self::Integer(num) => Some(*num),
+            _ => None,
+        }
+    }
+    pub fn float(&self) -> Option<f64> {
+        match self {
+            Self::Float(num) => Some(*num),
+            _ => None,
+        }
+    }
+    pub fn boolean(&self) -> Option<bool> {
+        match self {
+            Self::Boolean(bool_) => Some(*bool_),
+            _ => None,
+        }
+    }
+    pub fn array(&self) -> Option<&Vec<Self>> {
+        match self {
+            Self::Array(array) => Some(array),
+            _ => None,
+        }
+    }
+    pub fn table(&self) -> Option<&Table<'a>> {
+        match self {
+            Self::Table(table) => Some(table),
+            _ => None,
         }
     }
 }

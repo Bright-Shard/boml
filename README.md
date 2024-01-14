@@ -1,16 +1,16 @@
 # BOML
 
-A dependency-free, no-copy TOML parser for Rust. In an absolute Rust moment,
-TOML is Rust's main configuration format, and also appears to have zero serde-free
-TOML parsers. BOML solves it.
+A dependency-free, (almost) zero-copy TOML parser for Rust.
 
-This crate is WIP.
+This crate is WIP. The current goal is to be able to parse `Cargo.toml` files,
+which is almost complete - BOML just needs dotted key support.
 
 # Status/To-Do
 
-Any features marked `(future)` are planned for the future, but not of immediate
-importance. This crate is currently focused on having just enough features to
-parse `Cargo.toml` and other similar files.
+The time types (date, time, date-time) aren't of importance to BOML since the
+goal is just to parse `Cargo.toml` files. They will probably be supported at
+some point in the future, but are not planned for the initial version, hence
+why it's marked `(future)`.
 
 - [ ] Keys
   - [x] Bare keys
@@ -29,21 +29,23 @@ parse `Cargo.toml` and other similar files.
     - [ ] Local Date-Time
     - [ ] Local Date
     - [ ] Local Time
-  - [ ] Array
+  - [x] Array
 - [ ] Tables
   - [x] Table
   - [x] Inline Table
   - [ ] Array of Tables
-  - [ ] Array of Inline Tables (future)
+  - [x] Array of Inline Tables
 
-# Quirks
+# Why "(almost) zero-copy"?
 
-Basic strings with escapes are copied to some extent, because the escapes require modifying the strings themeslves,
-which requires a new string. To show this, the `Value::BasicString` type stores a `String`, while `Value::LiteralString`
-stores a `&str`.
+TOML has 2 kinds of strings: basic strings, and literal strings. Literal strings are
+just strings BOML can read from the file, but basic strings can have escapes (`\n`,
+for example, gets replaced with the newline character). Processing these escapes requires
+copying the string, and then replacing the escapes with their actual characters.
 
-To avoid copying them, basic strings that don't contain escapes are stored as literal strings - eg, they're stored as
-`Value::LiteralString` instead of `Value::BasicString`, even if they're technically basic strings..
+BOML will only copy and format a string if the string is a basic string (surrounded by `"`)
+*and* actually contains escapes. Literal strings (surrounded by `'`) and basic strings without
+escapes are not copied.
 
 # Whatsitstandfor
 

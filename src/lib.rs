@@ -66,7 +66,7 @@ impl<'a> Toml<'a> {
                         return Err(Error {
                             start: table_name.span().start - 1,
                             end: table_name.span().end,
-                            kind: ErrorKind::UnclosedTable,
+                            kind: ErrorKind::UnclosedBracket,
                         });
                     }
                     text.idx += 1;
@@ -163,10 +163,10 @@ pub enum ErrorKind {
     UnknownEscapeSequence,
     /// A unicode escape in a basic string has an unknown unicode scalar value.
     UnknownUnicodeScalar,
-    /// A table didn't have a closing bracket.
-    UnclosedTable,
-    /// There was no `,` in between values in an inline table.
-    NoInlineTableDelimeter,
+    /// A table, inline table, or array didn't have a closing bracket.
+    UnclosedBracket,
+    /// There was no `,` in between values in an inline table or array.
+    NoCommaDelimeter,
 }
 
 mod crate_prelude {
@@ -388,6 +388,43 @@ mod tests {
         let table2 = toml.get_table("table2").unwrap();
         assert_eq!(table2.get_string("name"), Ok("table2"));
         assert_eq!(table2.get_integer("num"), Ok(420));
+    }
+
+    /// Test that boml can parse arrays.
+    #[test]
+    fn arrays() {
+        let toml_source = concat!(
+            "strings = ['hi', 'hello', 'how are you']\n",
+            "nested = ['me', ['when i', 'nest'], 'arrays']\n",
+            "tables = [{name = 'bruh'}, {name = 'bruh 2 electric boogaloo'}]\n"
+        );
+        let toml = Toml::parse(toml_source).unwrap();
+
+        let strings = toml.get_array("strings").unwrap();
+        let strings: Vec<&str> = strings
+            .iter()
+            .map(|val| val.string().unwrap().as_str())
+            .collect();
+        assert_eq!(strings, vec!["hi", "hello", "how are you"]);
+
+        let mut nested = toml.get_array("nested").unwrap().iter();
+        assert_eq!(nested.next().unwrap().string().unwrap().as_str(), "me");
+        let mut subtable = nested.next().unwrap().array().unwrap().iter();
+        assert_eq!(
+            subtable.next().unwrap().string().unwrap().as_str(),
+            "when i"
+        );
+        assert_eq!(subtable.next().unwrap().string().unwrap().as_str(), "nest");
+        assert_eq!(nested.next().unwrap().string().unwrap().as_str(), "arrays");
+
+        let mut tables = toml.get_array("tables").unwrap().iter();
+        let table1 = tables.next().unwrap().table().unwrap();
+        assert_eq!(table1.get_string("name").unwrap(), "bruh");
+        let table2 = tables.next().unwrap().table().unwrap();
+        assert_eq!(
+            table2.get_string("name").unwrap(),
+            "bruh 2 electric boogaloo"
+        );
     }
 
     impl<'a> Toml<'a> {

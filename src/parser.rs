@@ -226,7 +226,53 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
         }
 
         // Array
-        b'[' => todo!(),
+        b'[' => {
+            if text.remaining_bytes() == 0 {
+                return Err(Error {
+                    start: text.idx,
+                    end: text.idx,
+                    kind: ErrorKind::UnclosedBracket,
+                });
+            }
+
+            let mut array = Vec::new();
+            let mut span = text.excerpt(text.idx..);
+
+            text.idx += 1;
+
+            loop {
+                text.skip_whitespace();
+
+                let value = parse_value(text)?;
+                array.push(value);
+                span.end = text.idx;
+
+                text.idx += 1;
+                text.skip_whitespace();
+                match text.current_byte() {
+                    Some(b']') => break,
+                    Some(b',') => {}
+                    Some(_) => {
+                        return Err(Error {
+                            start: text.idx,
+                            end: text.idx,
+                            kind: ErrorKind::NoCommaDelimeter,
+                        })
+                    }
+                    None => {
+                        return Err(Error {
+                            start: span.start,
+                            end: span.end,
+                            kind: ErrorKind::UnclosedBracket,
+                        })
+                    }
+                }
+
+                text.idx += 1;
+            }
+
+            Ok(TomlValue::Array(array))
+        }
 
         // Inline table
         b'{' => {
@@ -234,7 +280,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                 return Err(Error {
                     start: text.idx,
                     end: text.idx,
-                    kind: ErrorKind::UnclosedTable,
+                    kind: ErrorKind::UnclosedBracket,
                 });
             }
 
@@ -268,14 +314,14 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                         return Err(Error {
                             start: text.idx,
                             end: text.idx,
-                            kind: ErrorKind::NoInlineTableDelimeter,
+                            kind: ErrorKind::NoCommaDelimeter,
                         })
                     }
                     None => {
                         return Err(Error {
                             start: span.start,
                             end: span.end,
-                            kind: ErrorKind::UnclosedTable,
+                            kind: ErrorKind::UnclosedBracket,
                         })
                     }
                 }
