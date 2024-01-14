@@ -21,7 +21,12 @@ impl<'a> Toml<'a> {
     pub fn parse(text: &'a str) -> Result<Self, Error> {
         let mut text = Text { text, idx: 0 };
         text.skip_whitespace_and_newlines();
-        let mut values = HashMap::new();
+        let mut root_table = HashMap::new();
+        let mut current_table: Option<(
+            types::TomlString<'_>,
+            HashMap<types::TomlString<'_>, TomlValue<'_>>,
+            Span<'_>,
+        )> = None;
 
         while text.idx < text.len() - 1 {
             match text.current_byte().unwrap() {
@@ -31,7 +36,43 @@ impl<'a> Toml<'a> {
                 }
                 // Table definition
                 b'[' => {
-                    todo!()
+                    if let Some((name, map, mut source)) = current_table.take() {
+                        source.end = text.idx - 1;
+
+                        let start = name.span().start;
+                        let end = name.span().end;
+
+                        let old_table =
+                            root_table.insert(name, TomlValue::Table(Table { map, source }));
+
+                        if old_table.is_some() {
+                            return Err(Error {
+                                start,
+                                end,
+                                kind: ErrorKind::ReusedKey,
+                            });
+                        }
+                    }
+
+                    if text.byte(text.idx + 1) == Some(b']') {
+                        todo!("Array of tables")
+                    }
+
+                    text.idx += 1;
+                    let table_name = parser::parse_key(&mut text)?;
+                    text.idx += 1;
+
+                    if text.current_byte() != Some(b']') {
+                        return Err(Error {
+                            start: table_name.span().start - 1,
+                            end: table_name.span().end,
+                            kind: ErrorKind::UnclosedTable,
+                        });
+                    }
+                    text.idx += 1;
+
+                    let span = text.excerpt(table_name.span().start..);
+                    current_table = Some((table_name, HashMap::new(), span));
                 }
                 // Key definition
                 _ => {
@@ -58,15 +99,35 @@ impl<'a> Toml<'a> {
 
                     let value = parser::parse_value(&mut text)?;
                     text.idx += 1;
-                    values.insert(key, value);
+
+                    if let Some((_, ref mut table, _)) = current_table {
+                        table.insert(key, value);
+                    } else {
+                        root_table.insert(key, value);
+                    }
                 }
             }
 
             text.skip_whitespace_and_newlines();
         }
 
+        if let Some((name, map, source)) = current_table.take() {
+            let start = name.span().start;
+            let end = name.span().end;
+
+            let old_table = root_table.insert(name, TomlValue::Table(Table { map, source }));
+
+            if old_table.is_some() {
+                return Err(Error {
+                    start,
+                    end,
+                    kind: ErrorKind::ReusedKey,
+                });
+            }
+        }
+
         let table = Table {
-            map: values,
+            map: root_table,
             source: Span {
                 start: 0,
                 end: text.len(),
@@ -124,6 +185,8 @@ pub enum ErrorKind {
     UnknownEscapeSequence,
     /// A unicode escape in a basic string has an unknown unicode scalar value.
     UnknownUnicodeScalar,
+    /// A table didn't have a closing bracket.
+    UnclosedTable,
 }
 
 mod crate_prelude {
@@ -265,7 +328,8 @@ mod tests {
             "capital_exponential = 2E2\n",
             "combined = 7.27e2\n",
             "nan = +nan\n",
-            "infinity = -inf\n"
+            "infinity = -inf\n",
+            "underscore = 10_00.0\n",
         );
 
         let toml = Toml::parse(toml_source).unwrap();
@@ -280,6 +344,7 @@ mod tests {
                 ("capital_exponential", 2e2),
                 ("combined", 727.0),
                 ("infinity", -f64::INFINITY),
+                ("underscore", 1000.0),
             ]
             .into_iter()
             .map(|(key, val)| (key, TomlValue::Float(val)))
@@ -316,6 +381,27 @@ mod tests {
             .map(|(k, v)| (k, TomlValue::Boolean(v)))
             .collect(),
         );
+    }
+
+    /// Test that boml can parse tables.
+    #[test]
+    fn tables() {
+        let toml_source = concat!(
+            "[table1]\n",
+            "name = 'table1'\n",
+            "\n",
+            "[table2]\n",
+            "name = 'table2'\n",
+            "num = 420\n"
+        );
+        let toml = Toml::parse(toml_source).unwrap();
+
+        let table1 = toml.get_table("table1").unwrap();
+        assert_eq!(table1.get_string("name"), Ok("table1"));
+
+        let table2 = toml.get_table("table2").unwrap();
+        assert_eq!(table2.get_string("name"), Ok("table2"));
+        assert_eq!(table2.get_integer("num"), Ok(420));
     }
 
     impl<'a> Toml<'a> {

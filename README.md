@@ -31,7 +31,7 @@ parse `Cargo.toml` and other similar files.
     - [ ] Local Time
   - [ ] Array
 - [ ] Tables
-  - [ ] Table
+  - [x] Table
   - [ ] Inline Table
   - [ ] Array of Tables
   - [ ] Array of Inline Tables (future)

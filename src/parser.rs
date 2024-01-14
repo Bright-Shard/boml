@@ -63,6 +63,22 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                 span.start += 2;
             }
 
+            let mut string_buffer = None;
+            let source = if span.find(b'_').is_some() {
+                string_buffer = Some(String::with_capacity(span.len()));
+                let string = string_buffer.as_mut().unwrap();
+
+                for char_ in span.as_str().chars() {
+                    if char_ != '_' {
+                        string.push(char_);
+                    }
+                }
+
+                string_buffer.as_ref().unwrap()
+            } else {
+                span.as_str()
+            };
+
             // Float
             if radix.is_none()
                 && (span.find(b'.').is_some()
@@ -70,7 +86,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                     || span.find(b'E').is_some())
             {
                 // Unfortunately, the f64 parser doesn't give detailed error information, so this is the best we can do.
-                if let Ok(num) = span.as_str().parse() {
+                if let Ok(num) = source.parse() {
                     text.idx = span.end;
                     return Ok(TomlValue::Float(num));
                 }
@@ -82,7 +98,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
             }
 
             // Integer
-            match i64::from_str_radix(span.as_str(), radix.unwrap_or(10)) {
+            match i64::from_str_radix(source, radix.unwrap_or(10)) {
                 Ok(num) => {
                     text.idx = span.end;
                     return Ok(TomlValue::Integer(num));
