@@ -2,9 +2,6 @@
 
 A dependency-free, (almost) zero-copy TOML parser for Rust.
 
-This crate is WIP. The current goal is to be able to parse `Cargo.toml` files,
-which is almost complete (see the todo below).
-
 # Status/To-Do
 
 The time types (date, time, date-time) aren't of importance to BOML since the
@@ -29,10 +26,10 @@ some point in the future, but are not right now, hence why it's marked `(future)
     - [ ] Local Date
     - [ ] Local Time
   - [x] Array
-- [ ] Tables
+- [x] Tables
   - [x] Table
   - [x] Inline Table
-  - [ ] Array of Tables
+  - [x] Array of Tables
   - [x] Array of Inline Tables
 
 # Why "(almost) zero-copy"?

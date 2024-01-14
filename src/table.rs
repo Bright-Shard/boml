@@ -102,7 +102,7 @@ impl<'a> Table<'a> {
 
     /// Inserts a value into the table, handling dotted keys automatically. Returns true if
     /// inserting the value overwrote another value.
-    pub fn insert(&mut self, key: Key<'a>, value: TomlValue<'a>) -> bool {
+    pub(crate) fn insert(&mut self, key: Key<'a>, value: TomlValue<'a>) -> bool {
         if let Some(child) = key.child {
             let TomlValue::Table(ref mut table) = self
                 .map
@@ -114,6 +114,28 @@ impl<'a> Table<'a> {
             table.insert(*child, value)
         } else {
             self.map.insert(key.text, value).is_some()
+        }
+    }
+
+    /// Gets a value from the table, or inserts one if it doesn't exist. This handles dotted keys automatically,
+    /// but will return `None` if the key is invalid (ie indexes into something that isn't a table).
+    pub(crate) fn get_or_insert_mut(
+        &mut self,
+        key: Key<'a>,
+        value: TomlValue<'a>,
+    ) -> Option<&mut TomlValue<'a>> {
+        if let Some(child) = key.child {
+            let TomlValue::Table(ref mut table) = self
+                .map
+                .entry(key.text)
+                .or_insert(TomlValue::Table(Table::default()))
+            else {
+                return None;
+            };
+
+            table.get_or_insert_mut(*child, value)
+        } else {
+            Some(self.map.entry(key.text).or_insert(value))
         }
     }
 }

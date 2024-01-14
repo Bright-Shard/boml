@@ -21,7 +21,8 @@ impl<'a> Toml<'a> {
         let mut text = Text { text, idx: 0 };
         text.skip_whitespace_and_newlines();
         let mut root_table = Table::default();
-        let mut current_table: Option<(Key<'_>, Table<'_>)> = None;
+        // (table name, table, if it's a member of an array of tables)
+        let mut current_table: Option<(Key<'_>, Table<'_>, bool)> = None;
 
         while text.idx < text.end() {
             match text.current_byte().unwrap() {
@@ -31,42 +32,53 @@ impl<'a> Toml<'a> {
                 }
                 // Table definition
                 b'[' => {
-                    if let Some((key, table)) = current_table.take() {
-                        let (start, end) = (key.text.span().start, key.text.span().end);
-                        let old = root_table.insert(key, TomlValue::Table(table));
-                        if old {
+                    if let Some((key, table, array)) = current_table.take() {
+                        insert_subtable(&mut root_table, key, table, array)?;
+                    }
+
+                    if text.byte(text.idx + 1) == Some(b'[') {
+                        text.idx += 2;
+                        text.skip_whitespace();
+                        let table_name = parser::parse_key(&mut text)?;
+                        text.idx += 1;
+                        text.skip_whitespace();
+
+                        if text.current_byte() != Some(b']')
+                            || text.byte(text.idx + 1) != Some(b']')
+                        {
                             return Err(Error {
-                                start,
-                                end,
-                                kind: ErrorKind::ReusedKey,
+                                start: table_name.text.span().start - 1,
+                                end: table_name.text.span().end,
+                                kind: ErrorKind::UnclosedBracket,
                             });
                         }
+                        text.idx += 2;
+
+                        current_table = Some((table_name, Table::default(), true));
+                    } else {
+                        text.idx += 1;
+                        text.skip_whitespace();
+                        let table_name = parser::parse_key(&mut text)?;
+                        text.idx += 1;
+                        text.skip_whitespace();
+
+                        if text.current_byte() != Some(b']') {
+                            return Err(Error {
+                                start: table_name.text.span().start - 1,
+                                end: table_name.text.span().end,
+                                kind: ErrorKind::UnclosedBracket,
+                            });
+                        }
+                        text.idx += 1;
+
+                        current_table = Some((table_name, Table::default(), false));
                     }
-
-                    if text.byte(text.idx + 1) == Some(b']') {
-                        todo!("Array of tables")
-                    }
-
-                    text.idx += 1;
-                    let table_name = parser::parse_key(&mut text)?;
-                    text.idx += 1;
-
-                    if text.current_byte() != Some(b']') {
-                        return Err(Error {
-                            start: table_name.text.span().start - 1,
-                            end: table_name.text.span().end,
-                            kind: ErrorKind::UnclosedBracket,
-                        });
-                    }
-                    text.idx += 1;
-
-                    current_table = Some((table_name, Table::default()));
                 }
                 // Key definition
                 _ => {
                     let (key, value) = parser::parse_assignment(&mut text)?;
 
-                    let table = if let Some((_, ref mut table)) = current_table {
+                    let table = if let Some((_, ref mut table, _)) = current_table {
                         table
                     } else {
                         &mut root_table
@@ -81,8 +93,8 @@ impl<'a> Toml<'a> {
             text.skip_whitespace_and_newlines();
         }
 
-        if let Some((key, table)) = current_table.take() {
-            root_table.insert(key, TomlValue::Table(table));
+        if let Some((key, table, array)) = current_table.take() {
+            insert_subtable(&mut root_table, key, table, array)?;
         }
 
         Ok(Self {
@@ -97,6 +109,38 @@ impl<'a> Deref for Toml<'a> {
     fn deref(&self) -> &Self::Target {
         &self.table
     }
+}
+
+fn insert_subtable<'a>(
+    root_table: &mut Table<'a>,
+    key: Key<'a>,
+    table: Table<'a>,
+    array: bool,
+) -> Result<(), Error> {
+    let (start, end) = (key.text.span().start, key.text.span().end);
+    if array {
+        let Some(TomlValue::Array(array)) =
+            root_table.get_or_insert_mut(key, TomlValue::Array(Vec::new()))
+        else {
+            return Err(Error {
+                start,
+                end,
+                kind: ErrorKind::ReusedKey,
+            });
+        };
+        array.push(TomlValue::Table(table));
+    } else {
+        let old = root_table.insert(key, TomlValue::Table(table));
+        if old {
+            return Err(Error {
+                start,
+                end,
+                kind: ErrorKind::ReusedKey,
+            });
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -391,16 +435,51 @@ mod tests {
         );
     }
 
+    /// Test that boml can parse array tables.
+    #[test]
+    fn array_tables() {
+        let toml_source = concat!(
+            "[[entry]]\n",
+            "idx = 0\n",
+            "value = 'HALLO'\n",
+            "\n",
+            "[[entry]]\n",
+            "idx = 1\n",
+            "value = 727\n",
+            "\n",
+            "[[entry]]\n",
+            "idx = 2\n",
+            "value = true\n",
+        );
+        let toml = Toml::parse(toml_source).unwrap();
+
+        let entries = toml.get_array("entry").unwrap();
+
+        let first = entries[0].table().unwrap();
+        assert_eq!(first.get_integer("idx").unwrap(), 0);
+        assert_eq!(first.get_string("value").unwrap(), "HALLO");
+
+        let second = entries[1].table().unwrap();
+        assert_eq!(second.get_integer("idx").unwrap(), 1);
+        assert_eq!(second.get_integer("value").unwrap(), 727);
+
+        let third = entries[2].table().unwrap();
+        assert_eq!(third.get_integer("idx").unwrap(), 2);
+        assert!(third.get_boolean("value").unwrap());
+    }
+
     /// Test that boml works with weird formats - CRLF, weird spacings, etc.
     #[test]
     fn weird_formats() {
         let toml_source = concat!(
-            "val1 = true\r\n",
+            "   val1 = true\r\n",
             "val2=      false",
             "\n\r\n\r\n\n",
             "val3  =true\n",
             "val4=false\n",
-            "val5 = true      "
+            "val5 = true      \n",
+            "[parent .  \"child.dotted\"]\n",
+            "yippee = true"
         );
         let toml = Toml::new(toml_source).unwrap();
         toml.assert_values(
@@ -415,6 +494,10 @@ mod tests {
             .map(|(k, v)| (k, TomlValue::Boolean(v)))
             .collect(),
         );
+
+        let parent = toml.get_table("parent").unwrap();
+        let child = parent.get_table("child.dotted").unwrap();
+        assert!(child.get_boolean("yippee").unwrap());
     }
 
     impl<'a> Toml<'a> {
