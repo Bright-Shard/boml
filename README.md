@@ -3,19 +3,18 @@
 A dependency-free, (almost) zero-copy TOML parser for Rust.
 
 This crate is WIP. The current goal is to be able to parse `Cargo.toml` files,
-which is almost complete - BOML just needs dotted key support.
+which is almost complete (see the todo below).
 
 # Status/To-Do
 
 The time types (date, time, date-time) aren't of importance to BOML since the
-goal is just to parse `Cargo.toml` files. They will probably be supported at
-some point in the future, but are not planned for the initial version, hence
-why it's marked `(future)`.
+current goal is just to parse `Cargo.toml` files. They will be supported at
+some point in the future, but are not right now, hence why it's marked `(future)`.
 
-- [ ] Keys
+- [x] Keys
   - [x] Bare keys
   - [x] Quoted keys
-  - [ ] Dotted keys
+  - [x] Dotted keys
 - [ ] Values
   - [x] String
     - [x] Basic string

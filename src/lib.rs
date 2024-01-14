@@ -1,12 +1,11 @@
+use types::Key;
+
 pub mod parser;
 pub mod table;
 pub mod text;
 pub mod types;
 
-use {
-    crate_prelude::*,
-    std::{collections::HashMap, ops::Deref},
-};
+use {crate_prelude::*, std::ops::Deref};
 
 pub struct Toml<'a> {
     pub text: &'a str,
@@ -21,12 +20,8 @@ impl<'a> Toml<'a> {
     pub fn parse(text: &'a str) -> Result<Self, Error> {
         let mut text = Text { text, idx: 0 };
         text.skip_whitespace_and_newlines();
-        let mut root_table = HashMap::new();
-        let mut current_table: Option<(
-            types::TomlString<'_>,
-            HashMap<types::TomlString<'_>, TomlValue<'_>>,
-            Span<'_>,
-        )> = None;
+        let mut root_table = Table::default();
+        let mut current_table: Option<(Key<'_>, Table<'_>)> = None;
 
         while text.idx < text.end() {
             match text.current_byte().unwrap() {
@@ -36,16 +31,10 @@ impl<'a> Toml<'a> {
                 }
                 // Table definition
                 b'[' => {
-                    if let Some((name, map, mut source)) = current_table.take() {
-                        source.end = text.idx - 1;
-
-                        let start = name.span().start;
-                        let end = name.span().end;
-
-                        let old_table =
-                            root_table.insert(name, TomlValue::Table(Table { map, source }));
-
-                        if old_table.is_some() {
+                    if let Some((key, table)) = current_table.take() {
+                        let (start, end) = (key.text.span().start, key.text.span().end);
+                        let old = root_table.insert(key, TomlValue::Table(table));
+                        if old {
                             return Err(Error {
                                 start,
                                 end,
@@ -64,24 +53,27 @@ impl<'a> Toml<'a> {
 
                     if text.current_byte() != Some(b']') {
                         return Err(Error {
-                            start: table_name.span().start - 1,
-                            end: table_name.span().end,
+                            start: table_name.text.span().start - 1,
+                            end: table_name.text.span().end,
                             kind: ErrorKind::UnclosedBracket,
                         });
                     }
                     text.idx += 1;
 
-                    let span = text.excerpt(table_name.span().start..);
-                    current_table = Some((table_name, HashMap::new(), span));
+                    current_table = Some((table_name, Table::default()));
                 }
                 // Key definition
                 _ => {
                     let (key, value) = parser::parse_assignment(&mut text)?;
-                    if let Some((_, ref mut table, _)) = current_table {
-                        table.insert(key, value);
+
+                    let table = if let Some((_, ref mut table)) = current_table {
+                        table
                     } else {
-                        root_table.insert(key, value);
-                    }
+                        &mut root_table
+                    };
+
+                    table.insert(key, value);
+
                     text.idx += 1;
                 }
             }
@@ -89,33 +81,13 @@ impl<'a> Toml<'a> {
             text.skip_whitespace_and_newlines();
         }
 
-        if let Some((name, map, source)) = current_table.take() {
-            let start = name.span().start;
-            let end = name.span().end;
-
-            let old_table = root_table.insert(name, TomlValue::Table(Table { map, source }));
-
-            if old_table.is_some() {
-                return Err(Error {
-                    start,
-                    end,
-                    kind: ErrorKind::ReusedKey,
-                });
-            }
+        if let Some((key, table)) = current_table.take() {
+            root_table.insert(key, TomlValue::Table(table));
         }
-
-        let table = Table {
-            map: root_table,
-            source: Span {
-                start: 0,
-                end: text.end(),
-                source: text.text,
-            },
-        };
 
         Ok(Self {
             text: text.text,
-            table,
+            table: root_table,
         })
     }
 }
@@ -230,6 +202,24 @@ mod tests {
         );
     }
 
+    /// Test that boml can handle dotted keys.
+    #[test]
+    fn dotted_keys() {
+        let toml_source = concat!(
+            "table.bool = true\n",
+            "table.string = 'hi'\n",
+            "table. spaced = 69\n",
+            "table  .infinity = -inf\n",
+        );
+        let toml = Toml::parse(toml_source).unwrap();
+
+        let table = toml.get_table("table").unwrap();
+        assert!(table.get_boolean("bool").unwrap());
+        assert_eq!(table.get_string("string").unwrap(), "hi");
+        assert_eq!(table.get_integer("spaced").unwrap(), 69);
+        assert_eq!(table.get_float("infinity").unwrap(), -f64::INFINITY);
+    }
+
     /// Test that boml can parse literal strings and multiline literal strings.
     #[test]
     fn literal_strings() {
@@ -337,32 +327,6 @@ mod tests {
         assert!(nan.unwrap().is_nan())
     }
 
-    /// Test that boml works with weird formats - CRLF, weird spacings, etc.
-    #[test]
-    fn weird_formats() {
-        let toml_source = concat!(
-            "val1 = true\r\n",
-            "val2=      false",
-            "\n\r\n\r\n\n",
-            "val3  =true\n",
-            "val4=false\n",
-            "val5 = true      "
-        );
-        let toml = Toml::new(toml_source).unwrap();
-        toml.assert_values(
-            vec![
-                ("val1", true),
-                ("val2", false),
-                ("val3", true),
-                ("val4", false),
-                ("val5", true),
-            ]
-            .into_iter()
-            .map(|(k, v)| (k, TomlValue::Boolean(v)))
-            .collect(),
-        );
-    }
-
     /// Test that boml can parse tables.
     #[test]
     fn tables() {
@@ -424,6 +388,32 @@ mod tests {
         assert_eq!(
             table2.get_string("name").unwrap(),
             "bruh 2 electric boogaloo"
+        );
+    }
+
+    /// Test that boml works with weird formats - CRLF, weird spacings, etc.
+    #[test]
+    fn weird_formats() {
+        let toml_source = concat!(
+            "val1 = true\r\n",
+            "val2=      false",
+            "\n\r\n\r\n\n",
+            "val3  =true\n",
+            "val4=false\n",
+            "val5 = true      "
+        );
+        let toml = Toml::new(toml_source).unwrap();
+        toml.assert_values(
+            vec![
+                ("val1", true),
+                ("val2", false),
+                ("val3", true),
+                ("val4", false),
+                ("val5", true),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k, TomlValue::Boolean(v)))
+            .collect(),
         );
     }
 

@@ -1,6 +1,6 @@
 use std::{
     fmt::Display,
-    ops::{Bound, Deref, RangeBounds},
+    ops::{Bound, RangeBounds},
 };
 
 #[derive(Debug)]

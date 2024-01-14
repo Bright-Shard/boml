@@ -7,16 +7,18 @@
 
 use std::num::IntErrorKind;
 
-use {super::crate_prelude::*, crate::types::TomlString, std::collections::HashMap};
+use crate::types::Key;
 
-pub fn parse_assignment<'a>(text: &mut Text<'a>) -> Result<(TomlString<'a>, TomlValue<'a>), Error> {
+use {super::crate_prelude::*, crate::types::TomlString};
+
+pub fn parse_assignment<'a>(text: &mut Text<'a>) -> Result<(Key<'a>, TomlValue<'a>), Error> {
     let key = parse_key(text)?;
 
     text.idx += 1;
     text.skip_whitespace();
     if text.current_byte() != Some(b'=') {
         return Err(Error {
-            start: key.span().start,
+            start: key.text.span().start,
             end: text.idx,
             kind: ErrorKind::NoEqualsInAssignment,
         });
@@ -25,7 +27,7 @@ pub fn parse_assignment<'a>(text: &mut Text<'a>) -> Result<(TomlString<'a>, Toml
     text.skip_whitespace();
     if text.idx >= text.end() {
         return Err(Error {
-            start: key.span().start,
+            start: key.text.span().start,
             end: text.idx,
             kind: ErrorKind::NoValueInAssignment,
         });
@@ -36,28 +38,50 @@ pub fn parse_assignment<'a>(text: &mut Text<'a>) -> Result<(TomlString<'a>, Toml
     Ok((key, value))
 }
 
-pub fn parse_key<'a>(text: &mut Text<'a>) -> Result<TomlString<'a>, Error> {
+pub fn parse_key<'a>(text: &mut Text<'a>) -> Result<Key<'a>, Error> {
     match text.current_byte().unwrap() {
-        b'\'' | b'"' => parse_string(text),
+        b'\'' | b'"' => parse_string(text).map(|text| Key { text, child: None }),
         _ => {
             let start = text.idx;
             let mut current = text.idx;
 
             while let Some(byte) = text.byte(current) {
                 if !byte.is_ascii_alphanumeric() && byte != b'-' && byte != b'_' {
-                    text.idx = current - 1;
-                    return Ok(TomlString::Raw(text.excerpt(start..current)));
+                    break;
                 }
 
                 current += 1;
             }
 
-            // Text shouldn't end on a key definition
-            Err(Error {
-                start,
-                end: current,
-                kind: ErrorKind::NoValueInAssignment,
-            })
+            if text.byte(current).is_none() {
+                // Text shouldn't end on a key definition
+                return Err(Error {
+                    start,
+                    end: current,
+                    kind: ErrorKind::NoValueInAssignment,
+                });
+            }
+
+            let span = text.excerpt(start..current);
+
+            // Check for dotted key
+            text.idx = current;
+            text.skip_whitespace();
+            if text.current_byte() == Some(b'.') {
+                text.idx += 1;
+                text.skip_whitespace();
+
+                Ok(Key {
+                    text: TomlString::Raw(span),
+                    child: Some(Box::new(parse_key(text)?)),
+                })
+            } else {
+                text.idx = current - 1;
+                Ok(Key {
+                    text: TomlString::Raw(span),
+                    child: None,
+                })
+            }
         }
     }
 }
@@ -284,7 +308,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                 });
             }
 
-            let mut table = HashMap::new();
+            let mut table = Table::default();
             let mut span = text.excerpt(text.idx..);
 
             text.idx += 1;
@@ -293,10 +317,11 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                 text.skip_whitespace();
 
                 let (key, value) = parse_assignment(text)?;
-                let start = key.span().start;
-                let end = key.span().end;
+                let start = key.text.span().start;
+                let end = key.text.span().end;
+
                 let old_value = table.insert(key, value);
-                if old_value.is_some() {
+                if old_value {
                     return Err(Error {
                         start,
                         end,
@@ -329,10 +354,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                 text.idx += 1;
             }
 
-            Ok(TomlValue::Table(Table {
-                map: table,
-                source: span,
-            }))
+            Ok(TomlValue::Table(table))
         }
 
         // ¯\_(ツ)_/¯

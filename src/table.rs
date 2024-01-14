@@ -1,17 +1,13 @@
-use crate::types::TomlString;
+use crate::types::{Key, TomlString};
 
 use {
-    crate::{
-        text::Span,
-        types::{TomlValue, ValueType},
-    },
+    crate::types::{TomlValue, ValueType},
     std::collections::HashMap,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Table<'a> {
     pub map: HashMap<TomlString<'a>, TomlValue<'a>>,
-    pub source: Span<'a>,
 }
 impl<'a> Table<'a> {
     /// Gets the value for a key. If you know what type the value should be,
@@ -101,6 +97,23 @@ impl<'a> Table<'a> {
                     Err(FetchError::TypeMismatch(val, val.ty()))
                 }
             }
+        }
+    }
+
+    /// Inserts a value into the table, handling dotted keys automatically. Returns true if
+    /// inserting the value overwrote another value.
+    pub fn insert(&mut self, key: Key<'a>, value: TomlValue<'a>) -> bool {
+        if let Some(child) = key.child {
+            let TomlValue::Table(ref mut table) = self
+                .map
+                .entry(key.text)
+                .or_insert(TomlValue::Table(Table::default()))
+            else {
+                return true;
+            };
+            table.insert(*child, value)
+        } else {
+            self.map.insert(key.text, value).is_some()
         }
     }
 }

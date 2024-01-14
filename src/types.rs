@@ -137,3 +137,8 @@ impl<'a> From<Span<'a>> for TomlString<'a> {
         Self::Raw(value)
     }
 }
+
+pub struct Key<'a> {
+    pub text: TomlString<'a>,
+    pub child: Option<Box<Key<'a>>>,
+}
