@@ -32,7 +32,7 @@ parse `Cargo.toml` and other similar files.
   - [ ] Array
 - [ ] Tables
   - [x] Table
-  - [ ] Inline Table
+  - [x] Inline Table
   - [ ] Array of Tables
   - [ ] Array of Inline Tables (future)
 

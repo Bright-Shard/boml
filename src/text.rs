@@ -13,13 +13,6 @@ impl<'a> Display for Text<'a> {
         write!(f, "{}", self.text)
     }
 }
-impl<'a> Deref for Text<'a> {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.text
-    }
-}
 impl<'a: 'b, 'b> Text<'a> {
     pub fn excerpt<R: RangeBounds<usize>>(&self, range: R) -> Span<'b> {
         let start = match range.start_bound() {
@@ -30,7 +23,7 @@ impl<'a: 'b, 'b> Text<'a> {
         let end = match range.end_bound() {
             Bound::Excluded(end) => end - 1,
             Bound::Included(end) => *end,
-            Bound::Unbounded => self.len() - 1,
+            Bound::Unbounded => self.text.len() - 1,
         };
 
         Span {
@@ -51,7 +44,11 @@ impl<'a: 'b, 'b> Text<'a> {
     /// The number of remaining bytes in the text, not including the current byte
     #[inline]
     pub fn remaining_bytes(&self) -> usize {
-        self.len() - self.idx - 1
+        self.text.len() - self.idx - 1
+    }
+
+    pub fn end(&self) -> usize {
+        self.text.len() - 1
     }
 
     pub fn skip_whitespace(&mut self) {
@@ -82,23 +79,6 @@ pub struct Span<'a> {
     pub source: &'a str,
 }
 impl<'a: 'b, 'b> Span<'a> {
-    pub fn trim_end(&mut self) {
-        let initial_size = self.len();
-        let new_size = self.as_str().trim_end().len();
-        self.end -= initial_size - new_size;
-    }
-
-    pub fn trim_start(&mut self) {
-        let initial_size = self.len();
-        let new_size = self.as_str().trim_start().len();
-        self.start += initial_size - new_size;
-    }
-
-    pub fn trim(&mut self) {
-        self.trim_start();
-        self.trim_end();
-    }
-
     /// Finds the location of a character in this span, and returns its location,
     /// relative to the entire text this span comes from.
     pub fn find(&self, val: u8) -> Option<usize> {

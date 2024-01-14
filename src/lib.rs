@@ -28,7 +28,7 @@ impl<'a> Toml<'a> {
             Span<'_>,
         )> = None;
 
-        while text.idx < text.len() - 1 {
+        while text.idx < text.end() {
             match text.current_byte().unwrap() {
                 // Comment
                 b'#' => {
@@ -76,35 +76,13 @@ impl<'a> Toml<'a> {
                 }
                 // Key definition
                 _ => {
-                    let key = parser::parse_key(&mut text)?;
-
-                    text.idx += 1;
-                    text.skip_whitespace();
-                    if text.current_byte() != Some(b'=') {
-                        return Err(Error {
-                            start: key.span().start,
-                            end: text.idx,
-                            kind: ErrorKind::NoEqualsInAssignment,
-                        });
-                    }
-                    text.idx += 1;
-                    text.skip_whitespace();
-                    if text.is_empty() {
-                        return Err(Error {
-                            start: key.span().start,
-                            end: text.idx,
-                            kind: ErrorKind::NoValueInAssignment,
-                        });
-                    }
-
-                    let value = parser::parse_value(&mut text)?;
-                    text.idx += 1;
-
+                    let (key, value) = parser::parse_assignment(&mut text)?;
                     if let Some((_, ref mut table, _)) = current_table {
                         table.insert(key, value);
                     } else {
                         root_table.insert(key, value);
                     }
+                    text.idx += 1;
                 }
             }
 
@@ -130,7 +108,7 @@ impl<'a> Toml<'a> {
             map: root_table,
             source: Span {
                 start: 0,
-                end: text.len(),
+                end: text.end(),
                 source: text.text,
             },
         };
@@ -187,6 +165,8 @@ pub enum ErrorKind {
     UnknownUnicodeScalar,
     /// A table didn't have a closing bracket.
     UnclosedTable,
+    /// There was no `,` in between values in an inline table.
+    NoInlineTableDelimeter,
 }
 
 mod crate_prelude {
@@ -387,6 +367,8 @@ mod tests {
     #[test]
     fn tables() {
         let toml_source = concat!(
+            "inline = { name = 'inline', num = inf }\n",
+            "\n",
             "[table1]\n",
             "name = 'table1'\n",
             "\n",
@@ -395,6 +377,10 @@ mod tests {
             "num = 420\n"
         );
         let toml = Toml::parse(toml_source).unwrap();
+
+        let inline = toml.get_table("inline").unwrap();
+        assert_eq!(inline.get_string("name"), Ok("inline"));
+        assert_eq!(inline.get_float("num"), Ok(f64::INFINITY));
 
         let table1 = toml.get_table("table1").unwrap();
         assert_eq!(table1.get_string("name"), Ok("table1"));

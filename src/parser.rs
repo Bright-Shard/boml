@@ -9,6 +9,33 @@ use std::num::IntErrorKind;
 
 use {super::crate_prelude::*, crate::types::TomlString, std::collections::HashMap};
 
+pub fn parse_assignment<'a>(text: &mut Text<'a>) -> Result<(TomlString<'a>, TomlValue<'a>), Error> {
+    let key = parse_key(text)?;
+
+    text.idx += 1;
+    text.skip_whitespace();
+    if text.current_byte() != Some(b'=') {
+        return Err(Error {
+            start: key.span().start,
+            end: text.idx,
+            kind: ErrorKind::NoEqualsInAssignment,
+        });
+    }
+    text.idx += 1;
+    text.skip_whitespace();
+    if text.idx >= text.end() {
+        return Err(Error {
+            start: key.span().start,
+            end: text.idx,
+            kind: ErrorKind::NoValueInAssignment,
+        });
+    }
+
+    let value = parse_value(text)?;
+
+    Ok((key, value))
+}
+
 pub fn parse_key<'a>(text: &mut Text<'a>) -> Result<TomlString<'a>, Error> {
     match text.current_byte().unwrap() {
         b'\'' | b'"' => parse_string(text),
@@ -39,11 +66,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
     match text.current_byte().unwrap() {
         // Integer, time, or float
         b'0'..=b'9' => {
-            let mut span = Span {
-                start: text.idx,
-                end: text.len() - 1,
-                source: text.text,
-            };
+            let mut span = text.excerpt(text.idx..);
             if let Some(end_idx) = span.find_next_whitespace_or_newline() {
                 span.end = end_idx - 1;
             }
@@ -63,21 +86,19 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                 span.start += 2;
             }
 
-            let mut string_buffer = None;
             let source = if span.find(b'_').is_some() {
-                string_buffer = Some(String::with_capacity(span.len()));
-                let string = string_buffer.as_mut().unwrap();
-
+                let mut string = String::with_capacity(span.len());
                 for char_ in span.as_str().chars() {
                     if char_ != '_' {
                         string.push(char_);
                     }
                 }
 
-                string_buffer.as_ref().unwrap()
+                TomlString::Formatted(span, string)
             } else {
-                span.as_str()
+                TomlString::Raw(span)
             };
+            let span = source.span();
 
             // Float
             if radix.is_none()
@@ -98,7 +119,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
             }
 
             // Integer
-            match i64::from_str_radix(source, radix.unwrap_or(10)) {
+            match i64::from_str_radix(source.as_str(), radix.unwrap_or(10)) {
                 Ok(num) => {
                     text.idx = span.end;
                     return Ok(TomlValue::Integer(num));
@@ -119,9 +140,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
             let span = text.excerpt(text.idx - 1..);
             Err(Error {
                 start: span.start,
-                end: span
-                    .find_next_whitespace_or_newline()
-                    .unwrap_or(text.len() - 1),
+                end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
                 kind: ErrorKind::UnrecognisedValue,
             })
         }
@@ -136,9 +155,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                 let span = text.excerpt(text.idx - 1..);
                 Err(Error {
                     start: span.start,
-                    end: span
-                        .find_next_whitespace_or_newline()
-                        .unwrap_or(text.len() - 1),
+                    end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
                     kind: ErrorKind::UnrecognisedValue,
                 })
             }
@@ -152,20 +169,18 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                 let span = text.excerpt(text.idx - 1..);
                 Err(Error {
                     start: span.start,
-                    end: span
-                        .find_next_whitespace_or_newline()
-                        .unwrap_or(text.len() - 1),
+                    end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
                     kind: ErrorKind::UnrecognisedValue,
                 })
             }
         }
 
         // Integer or float with +/- modifier
-        b'+' if !text.is_empty() => {
+        b'+' if text.remaining_bytes() > 0 => {
             text.idx += 1;
             parse_value(text)
         }
-        b'-' if !text.is_empty() => {
+        b'-' if text.remaining_bytes() > 0 => {
             text.idx += 1;
 
             match parse_value(text) {
@@ -176,9 +191,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
                         let span = text.excerpt(text.idx - 1..);
                         Err(Error {
                             start: span.start,
-                            end: span
-                                .find_next_whitespace_or_newline()
-                                .unwrap_or(text.len() - 1),
+                            end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
                             kind: ErrorKind::UnrecognisedValue,
                         })
                     }
@@ -207,9 +220,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
             let span = text.excerpt(text.idx..);
             Err(Error {
                 start: span.start,
-                end: span
-                    .find_next_whitespace_or_newline()
-                    .unwrap_or(text.len() - 1),
+                end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
                 kind: ErrorKind::UnrecognisedValue,
             })
         }
@@ -217,17 +228,73 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
         // Array
         b'[' => todo!(),
 
-        // Table
-        b'{' => todo!(),
+        // Inline table
+        b'{' => {
+            if text.remaining_bytes() == 0 {
+                return Err(Error {
+                    start: text.idx,
+                    end: text.idx,
+                    kind: ErrorKind::UnclosedTable,
+                });
+            }
+
+            let mut table = HashMap::new();
+            let mut span = text.excerpt(text.idx..);
+
+            text.idx += 1;
+
+            loop {
+                text.skip_whitespace();
+
+                let (key, value) = parse_assignment(text)?;
+                let start = key.span().start;
+                let end = key.span().end;
+                let old_value = table.insert(key, value);
+                if old_value.is_some() {
+                    return Err(Error {
+                        start,
+                        end,
+                        kind: ErrorKind::ReusedKey,
+                    });
+                }
+                span.end = text.idx;
+
+                text.idx += 1;
+                text.skip_whitespace();
+                match text.current_byte() {
+                    Some(b'}') => break,
+                    Some(b',') => {}
+                    Some(_) => {
+                        return Err(Error {
+                            start: text.idx,
+                            end: text.idx,
+                            kind: ErrorKind::NoInlineTableDelimeter,
+                        })
+                    }
+                    None => {
+                        return Err(Error {
+                            start: span.start,
+                            end: span.end,
+                            kind: ErrorKind::UnclosedTable,
+                        })
+                    }
+                }
+
+                text.idx += 1;
+            }
+
+            Ok(TomlValue::Table(Table {
+                map: table,
+                source: span,
+            }))
+        }
 
         // ¯\_(ツ)_/¯
         _ => {
             let span = text.excerpt(text.idx..);
             Err(Error {
                 start: span.start,
-                end: span
-                    .find_next_whitespace_or_newline()
-                    .unwrap_or(text.len() - 1),
+                end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
                 kind: ErrorKind::UnrecognisedValue,
             })
         }
@@ -235,31 +302,26 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 }
 
 pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<TomlString<'a>, Error> {
-    let mut span = Span {
-        start: text.idx,
-        end: text.len() - 1,
-        source: text.text,
-    };
+    let mut span = text.excerpt(text.idx..);
 
     match text.current_byte().unwrap() {
         b'\'' => {
-            let (end, offset) =
-                if text.len() > 5 && text.excerpt(text.idx..text.idx + 3).to_str() == "'''" {
-                    // Multi-line string
-                    span.start += 3;
-                    (span.as_str().find("'''").map(|idx| span.start + idx), 3)
-                } else {
-                    // Single-line string
-                    span.start += 1;
-                    (span.find(b'\''), 1)
-                };
+            let (end, offset) = if text.remaining_bytes() > 5
+                && text.excerpt(text.idx..text.idx + 3).to_str() == "'''"
+            {
+                // Multi-line string
+                span.start += 3;
+                (span.as_str().find("'''").map(|idx| span.start + idx), 3)
+            } else {
+                // Single-line string
+                span.start += 1;
+                (span.find(b'\''), 1)
+            };
 
             let Some(end) = end else {
                 return Err(Error {
                     start: text.idx,
-                    end: span
-                        .find_next_whitespace_or_newline()
-                        .unwrap_or(text.len() - 1),
+                    end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
                     kind: ErrorKind::UnclosedString,
                 });
             };
@@ -269,17 +331,15 @@ pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<TomlString<'a>, Error> {
             Ok(TomlString::Raw(span))
         }
         b'"' => {
-            let multiline =
-                text.len() > 5 && text.excerpt(text.idx..text.idx + 3).to_str() == "\"\"\"";
+            let multiline = text.remaining_bytes() > 5
+                && text.excerpt(text.idx..text.idx + 3).to_str() == "\"\"\"";
             let offset = if multiline { 3 } else { 1 };
             let start = span.start;
 
             let Some(end) = find_basic_string_end(&mut span, text, multiline) else {
                 return Err(Error {
                     start: text.idx,
-                    end: span
-                        .find_next_whitespace_or_newline()
-                        .unwrap_or(text.len() - 1),
+                    end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
                     kind: ErrorKind::UnclosedString,
                 });
             };
