@@ -1,14 +1,16 @@
+use crate::types::TomlString;
+
 use {
     crate::{
         text::Span,
-        value::{Value, ValueType},
+        types::{TomlValue, ValueType},
     },
     std::collections::HashMap,
 };
 
 #[derive(Debug, PartialEq)]
 pub struct Table<'a> {
-    pub map: HashMap<&'a str, Value<'a>>,
+    pub map: HashMap<TomlString<'a>, TomlValue<'a>>,
     pub source: Span<'a>,
 }
 impl<'a> Table<'a> {
@@ -16,7 +18,7 @@ impl<'a> Table<'a> {
     /// it's recommended to use a `get_<type>` method instead, as they simplify
     /// some issues (like literal vs basic strings).
     #[inline(always)]
-    pub fn get(&self, key: &str) -> Option<&Value<'a>> {
+    pub fn get(&self, key: &str) -> Option<&TomlValue<'a>> {
         self.map.get(key)
     }
 
@@ -25,7 +27,7 @@ impl<'a> Table<'a> {
         match self.get(key) {
             None => Err(FetchError::InvalidKey),
             Some(val) => {
-                if let Value::Table(table) = val {
+                if let TomlValue::Table(table) = val {
                     Ok(table)
                 } else {
                     Err(FetchError::TypeMismatch(val, val.ty()))
@@ -40,8 +42,7 @@ impl<'a> Table<'a> {
         match self.get(key) {
             None => Err(FetchError::InvalidKey),
             Some(val) => match val {
-                Value::BasicString(string) => Ok(string),
-                Value::LiteralString(string) => Ok(string),
+                TomlValue::String(string) => Ok(string.as_str()),
                 other_val => Err(FetchError::TypeMismatch(other_val, other_val.ty())),
             },
         }
@@ -52,7 +53,7 @@ impl<'a> Table<'a> {
         match self.get(key) {
             None => Err(FetchError::InvalidKey),
             Some(val) => {
-                if let Value::Integer(int) = val {
+                if let TomlValue::Integer(int) = val {
                     Ok(*int)
                 } else {
                     Err(FetchError::TypeMismatch(val, val.ty()))
@@ -66,7 +67,7 @@ impl<'a> Table<'a> {
         match self.get(key) {
             None => Err(FetchError::InvalidKey),
             Some(val) => {
-                if let Value::Float(float) = val {
+                if let TomlValue::Float(float) = val {
                     Ok(*float)
                 } else {
                     Err(FetchError::TypeMismatch(val, val.ty()))
@@ -80,7 +81,7 @@ impl<'a> Table<'a> {
         match self.get(key) {
             None => Err(FetchError::InvalidKey),
             Some(val) => {
-                if let Value::Boolean(bool) = val {
+                if let TomlValue::Boolean(bool) = val {
                     Ok(*bool)
                 } else {
                     Err(FetchError::TypeMismatch(val, val.ty()))
@@ -91,9 +92,10 @@ impl<'a> Table<'a> {
 }
 
 /// Errors for the `get_<type>` methods in [`Table`].
+#[derive(Debug, PartialEq)]
 pub enum FetchError<'a, 'table> {
     /// There was no value for this key.
     InvalidKey,
     /// The value for this key had a different type.
-    TypeMismatch(&'a Value<'table>, ValueType),
+    TypeMismatch(&'a TomlValue<'table>, ValueType),
 }

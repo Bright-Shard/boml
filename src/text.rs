@@ -43,6 +43,33 @@ impl<'a: 'b, 'b> Text<'a> {
     pub fn byte(&self, idx: usize) -> Option<u8> {
         self.text.as_bytes().get(idx).copied()
     }
+    #[inline(always)]
+    pub fn current_byte(&self) -> Option<u8> {
+        self.byte(self.idx)
+    }
+
+    /// The number of remaining bytes in the text, not including the current byte
+    #[inline]
+    pub fn remaining_bytes(&self) -> usize {
+        self.len() - self.idx - 1
+    }
+
+    pub fn skip_whitespace(&mut self) {
+        while let Some(byte) = self.current_byte() {
+            match byte {
+                b'\t' | b' ' => self.idx += 1,
+                _ => break,
+            }
+        }
+    }
+    pub fn skip_whitespace_and_newlines(&mut self) {
+        while let Some(byte) = self.current_byte() {
+            match byte {
+                b'\t' | b' ' | b'\n' | b'\r' => self.idx += 1,
+                _ => break,
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -82,6 +109,38 @@ impl<'a: 'b, 'b> Span<'a> {
         }
 
         None
+    }
+
+    // Finds the start of the next whitespace or newline, and returns its location,
+    /// relative to the entire text this span comes from.
+    pub fn find_next_whitespace_or_newline(&self) -> Option<usize> {
+        let end = self.source.len();
+        let space_idx = self.find(b' ').unwrap_or(end);
+        let tab_idx = self.find(b'\t').unwrap_or(end);
+        let mut newline_idx = self.find(b'\n').unwrap_or(end);
+
+        // CRLF compat
+        if self.source.as_bytes()[newline_idx - 1] == b'\r' {
+            newline_idx -= 1;
+        }
+
+        let nearest_whitespace = if space_idx < tab_idx {
+            space_idx
+        } else {
+            tab_idx
+        };
+
+        let nearest = if nearest_whitespace < newline_idx {
+            nearest_whitespace
+        } else {
+            newline_idx
+        };
+
+        if nearest == end {
+            None
+        } else {
+            Some(nearest)
+        }
     }
 
     #[inline]

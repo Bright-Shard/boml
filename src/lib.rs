@@ -1,7 +1,7 @@
 pub mod parser;
 pub mod table;
 pub mod text;
-pub mod value;
+pub mod types;
 
 use {
     crate_prelude::*,
@@ -20,16 +20,11 @@ impl<'a> Toml<'a> {
 
     pub fn parse(text: &'a str) -> Result<Self, Error> {
         let mut text = Text { text, idx: 0 };
+        text.skip_whitespace_and_newlines();
         let mut values = HashMap::new();
 
         while text.idx < text.len() - 1 {
-            // println!(
-            //     "Main loop is at: |{}|",
-            //     text.byte(text.idx).unwrap().to_owned() as char
-            // );
-            match text.byte(text.idx).unwrap() {
-                // Whitespace
-                b' ' | b'\n' | b'\r' => text.idx += 1,
+            match text.current_byte().unwrap() {
                 // Comment
                 b'#' => {
                     todo!()
@@ -38,22 +33,38 @@ impl<'a> Toml<'a> {
                 b'[' => {
                     todo!()
                 }
-                // Quoted key definition
-                b'\'' | b'\"' => {
-                    let key = parser::parse_quoted_key(&mut text)?;
-                    let value = parser::parse_value(&mut text)?;
-                    values.insert(key.to_str(), value);
-                }
-                // Bare key definition
+                // Key definition
                 _ => {
-                    let key = parser::parse_bare_key(&mut text)?;
+                    let key = parser::parse_key(&mut text)?;
+
+                    text.idx += 1;
+                    text.skip_whitespace();
+                    if text.current_byte() != Some(b'=') {
+                        return Err(Error {
+                            start: key.span().start,
+                            end: text.idx,
+                            kind: ErrorKind::NoEqualsInAssignment,
+                        });
+                    }
+                    text.idx += 1;
+                    text.skip_whitespace();
+                    if text.is_empty() {
+                        return Err(Error {
+                            start: key.span().start,
+                            end: text.idx,
+                            kind: ErrorKind::NoValueInAssignment,
+                        });
+                    }
+
                     let value = parser::parse_value(&mut text)?;
-                    values.insert(key.to_str(), value);
+                    text.idx += 1;
+                    values.insert(key, value);
                 }
             }
+
+            text.skip_whitespace_and_newlines();
         }
 
-        let values = values.into_iter().map(|(k, v)| (k, v.value)).collect();
         let table = Table {
             map: values,
             source: Span {
@@ -90,16 +101,14 @@ pub enum ErrorKind {
     InvalidBareKey,
     /// There was a space in the middle of a bare key.
     BareKeyHasSpace,
-    /// A quoted key didn't have a closing quote.
-    UnclosedQuotedKey,
     /// There was no `=` sign in a key/value assignment.
     NoEqualsInAssignment,
     /// There was no key in a key/value assignment.
     NoKeyInAssignment,
     /// There was no value in a key/value assignment.
     NoValueInAssignment,
-    /// A string literal didn't have closing quotes.
-    UnclosedStringLiteral,
+    /// A string literal or quoted key didn't have a closing quote.
+    UnclosedString,
     /// The value in a key/value assignment wasn't recognised.
     UnrecognisedValue,
     /// The same key was used twice.
@@ -121,7 +130,7 @@ mod crate_prelude {
     pub use super::{
         table::Table,
         text::{Span, Text},
-        value::{TomlData, Value},
+        types::TomlValue,
         Error, ErrorKind,
     };
 }
@@ -141,13 +150,18 @@ mod tests {
             "under_score = true\n"
         );
         let toml = Toml::parse(toml_source).unwrap();
-        toml.assert_values(vec![
-            ("val1", Value::Boolean(true)),
-            ("val2", Value::Boolean(false)),
-            ("5678", Value::Boolean(true)),
-            ("dash-ed", Value::Boolean(true)),
-            ("under_score", Value::Boolean(true)),
-        ]);
+        toml.assert_values(
+            vec![
+                ("val1", true),
+                ("val2", false),
+                ("5678", true),
+                ("dash-ed", true),
+                ("under_score", true),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k, TomlValue::Boolean(v)))
+            .collect(),
+        );
     }
 
     /// Test that boml can parse quoted keys.
@@ -160,12 +174,17 @@ mod tests {
             "'quoted \"key\" 2' = true\n",
         );
         let toml = Toml::parse(toml_source).unwrap();
-        toml.assert_values(vec![
-            ("val0.1.1", Value::Boolean(true)),
-            ("ʎǝʞ", Value::Boolean(true)),
-            ("quoted 'key'", Value::Boolean(true)),
-            ("quoted \"key\" 2", Value::Boolean(true)),
-        ]);
+        toml.assert_values(
+            vec![
+                ("val0.1.1", true),
+                ("ʎǝʞ", true),
+                ("quoted 'key'", true),
+                ("quoted \"key\" 2", true),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k, TomlValue::Boolean(v)))
+            .collect(),
+        );
     }
 
     /// Test that boml can parse literal strings and multiline literal strings.
@@ -175,10 +194,7 @@ mod tests {
         let multi = "Bruhhhh I gotta write\n*another*\ndemo sentence???\n:(";
         let toml_source = format!("single = '{single}'\n") + &format!("multi = '''{multi}'''");
         let toml = Toml::parse(&toml_source).unwrap();
-        toml.assert_values(vec![
-            ("single", Value::LiteralString(single)),
-            ("multi", Value::LiteralString(multi)),
-        ]);
+        toml.assert_strings(vec![("single", single), ("multi", multi)]);
     }
 
     /// Test that boml can parse basic strings and multiline basic strings.
@@ -196,18 +212,12 @@ mod tests {
             "whitespace = \"\"\"white\\    \n\n\n\r\n    space\"\"\""
         );
         let toml = Toml::parse(toml_source).unwrap();
-        toml.assert_values(vec![
-            ("normal", Value::LiteralString("normality 100")),
-            (
-                "quotes",
-                Value::BasicString(String::from("Bro I got \"quotes\"")),
-            ),
-            ("escapes", Value::BasicString(String::from("\t\n\r\\"))),
-            (
-                "multi",
-                Value::BasicString(String::from("me when\ni do multiline\r pretty neat")),
-            ),
-            ("whitespace", Value::BasicString(String::from("whitespace"))),
+        toml.assert_strings(vec![
+            ("normal", "normality 100"),
+            ("quotes", "Bro I got \"quotes\""),
+            ("escapes", "\t\n\r\\"),
+            ("multi", "me when\ni do multiline\r pretty neat"),
+            ("whitespace", "whitespace"),
         ]);
     }
 
@@ -221,18 +231,25 @@ mod tests {
             "binary = 0b10\n",
             "neghex = -0x10\n",
             "posoctal = +0o10\n",
-            "lmao = -0\n"
+            "lmao = -0\n",
+            "underscore = 10_00\n"
         );
         let toml = Toml::parse(toml_source).unwrap();
-        toml.assert_values(vec![
-            ("hex", Value::Integer(16)),
-            ("decimal", Value::Integer(10)),
-            ("octal", Value::Integer(8)),
-            ("binary", Value::Integer(2)),
-            ("neghex", Value::Integer(-16)),
-            ("posoctal", Value::Integer(8)),
-            ("lmao", Value::Integer(0)),
-        ]);
+        toml.assert_values(
+            vec![
+                ("hex", 16),
+                ("decimal", 10),
+                ("octal", 8),
+                ("binary", 2),
+                ("neghex", -16),
+                ("posoctal", 8),
+                ("lmao", 0),
+                ("underscore", 1000),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k, TomlValue::Integer(v)))
+            .collect(),
+        );
     }
 
     /// Test that boml can parse floats.
@@ -244,10 +261,13 @@ mod tests {
             "exponential_neg = 4e-2\n",
             "exponential_pos = 4e+2\n",
             "pos_fractional = +0.567\n",
-            "neg_fractional = -.123\n",
+            "neg_fractional = -0.123\n",
             "capital_exponential = 2E2\n",
-            "combined = 7.27e2\n"
+            "combined = 7.27e2\n",
+            "nan = +nan\n",
+            "infinity = -inf\n"
         );
+
         let toml = Toml::parse(toml_source).unwrap();
         toml.assert_values(
             vec![
@@ -259,11 +279,17 @@ mod tests {
                 ("neg_fractional", -0.123),
                 ("capital_exponential", 2e2),
                 ("combined", 727.0),
+                ("infinity", -f64::INFINITY),
             ]
             .into_iter()
-            .map(|(key, val)| (key, Value::Float(val)))
+            .map(|(key, val)| (key, TomlValue::Float(val)))
             .collect(),
         );
+
+        // NaN != NaN, so we have to check with the `is_nan()` method.
+        let nan = toml.get_float("nan");
+        assert!(nan.is_ok());
+        assert!(nan.unwrap().is_nan())
     }
 
     /// Test that boml works with weird formats - CRLF, weird spacings, etc.
@@ -278,25 +304,36 @@ mod tests {
             "val5 = true      "
         );
         let toml = Toml::new(toml_source).unwrap();
-        toml.assert_values(vec![
-            ("val1", Value::Boolean(true)),
-            ("val2", Value::Boolean(false)),
-            ("val3", Value::Boolean(true)),
-            ("val4", Value::Boolean(false)),
-            ("val5", Value::Boolean(true)),
-        ]);
+        toml.assert_values(
+            vec![
+                ("val1", true),
+                ("val2", false),
+                ("val3", true),
+                ("val4", false),
+                ("val5", true),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k, TomlValue::Boolean(v)))
+            .collect(),
+        );
     }
 
     impl<'a> Toml<'a> {
         #[inline]
-        pub fn assert_value(&self, key: &str, expected_value: Value<'_>) {
+        pub fn assert_value(&self, key: &str, expected_value: TomlValue<'_>) {
             assert_eq!(*self.get(key).unwrap(), expected_value);
         }
         #[inline]
-        pub fn assert_values(&self, expected_values: Vec<(&str, Value<'_>)>) {
+        pub fn assert_values(&self, expected_values: Vec<(&str, TomlValue<'_>)>) {
             for (key, expected_value) in expected_values {
                 self.assert_value(key, expected_value);
-                // println!("Asserted value");
+            }
+        }
+        pub fn assert_strings(&self, strings: Vec<(&str, &str)>) {
+            for (key, expected_string) in strings {
+                let value = self.get_string(key);
+                assert!(value.is_ok());
+                assert_eq!(value.unwrap(), expected_string);
             }
         }
     }
