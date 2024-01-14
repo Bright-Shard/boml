@@ -1,6 +1,7 @@
-use std::{borrow::Borrow, fmt::Display, hash::Hash, ops::Deref};
-
-use crate::crate_prelude::*;
+use {
+    crate::crate_prelude::*,
+    std::{borrow::Borrow, fmt::Display, hash::Hash, ops::Deref},
+};
 
 #[derive(Debug, PartialEq)]
 pub enum TomlValue<'a> {
@@ -31,9 +32,9 @@ impl<'a> TomlValue<'a> {
         }
     }
 
-    pub fn string(&self) -> Option<&TomlString<'a>> {
+    pub fn string(&self) -> Option<&str> {
         match self {
-            Self::String(string) => Some(string),
+            Self::String(string) => Some(string.as_str()),
             _ => None,
         }
     }

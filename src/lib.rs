@@ -28,7 +28,12 @@ impl<'a> Toml<'a> {
             match text.current_byte().unwrap() {
                 // Comment
                 b'#' => {
-                    todo!()
+                    if let Some(newline_idx) = text.excerpt(text.idx..).find(b'\n') {
+                        text.idx = newline_idx;
+                    } else {
+                        // Comment is at end of file
+                        break;
+                    }
                 }
                 // Table definition
                 b'[' => {
@@ -71,12 +76,15 @@ impl<'a> Toml<'a> {
                         }
                         text.idx += 1;
 
+                        println!("In table: `{}`", table_name.text);
+
                         current_table = Some((table_name, Table::default(), false));
                     }
                 }
                 // Key definition
                 _ => {
                     let (key, value) = parser::parse_assignment(&mut text)?;
+                    println!("Key: {}\nValue:{value:?}", key.text);
 
                     let table = if let Some((_, ref mut table, _)) = current_table {
                         table
@@ -189,7 +197,7 @@ mod crate_prelude {
     pub use super::{
         table::Table,
         text::{Span, Text},
-        types::TomlValue,
+        types::{Key, TomlString, TomlValue, ValueType},
         Error, ErrorKind,
     };
 }
@@ -409,21 +417,15 @@ mod tests {
         let toml = Toml::parse(toml_source).unwrap();
 
         let strings = toml.get_array("strings").unwrap();
-        let strings: Vec<&str> = strings
-            .iter()
-            .map(|val| val.string().unwrap().as_str())
-            .collect();
+        let strings: Vec<&str> = strings.iter().map(|val| val.string().unwrap()).collect();
         assert_eq!(strings, vec!["hi", "hello", "how are you"]);
 
         let mut nested = toml.get_array("nested").unwrap().iter();
-        assert_eq!(nested.next().unwrap().string().unwrap().as_str(), "me");
+        assert_eq!(nested.next().unwrap().string().unwrap(), "me");
         let mut subtable = nested.next().unwrap().array().unwrap().iter();
-        assert_eq!(
-            subtable.next().unwrap().string().unwrap().as_str(),
-            "when i"
-        );
-        assert_eq!(subtable.next().unwrap().string().unwrap().as_str(), "nest");
-        assert_eq!(nested.next().unwrap().string().unwrap().as_str(), "arrays");
+        assert_eq!(subtable.next().unwrap().string().unwrap(), "when i");
+        assert_eq!(subtable.next().unwrap().string().unwrap(), "nest");
+        assert_eq!(nested.next().unwrap().string().unwrap(), "arrays");
 
         let mut tables = toml.get_array("tables").unwrap().iter();
         let table1 = tables.next().unwrap().table().unwrap();

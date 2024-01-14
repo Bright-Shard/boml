@@ -5,11 +5,7 @@
 //! quote of a quoted key, opening bracket of a table, etc. Each parser should leave `text.idx`
 //! at the last byte of the value it parsed.
 
-use std::num::IntErrorKind;
-
-use crate::types::Key;
-
-use {super::crate_prelude::*, crate::types::TomlString};
+use {crate::crate_prelude::*, std::num::IntErrorKind};
 
 pub fn parse_assignment<'a>(text: &mut Text<'a>) -> Result<(Key<'a>, TomlValue<'a>), Error> {
     let key = parse_key(text)?;
@@ -265,14 +261,19 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
             text.idx += 1;
 
             loop {
-                text.skip_whitespace();
+                text.skip_whitespace_and_newlines();
+
+                // Trailing comma support
+                if let Some(b']') = text.current_byte() {
+                    break;
+                }
 
                 let value = parse_value(text)?;
                 array.push(value);
                 span.end = text.idx;
 
                 text.idx += 1;
-                text.skip_whitespace();
+                text.skip_whitespace_and_newlines();
                 match text.current_byte() {
                     Some(b']') => break,
                     Some(b',') => {}

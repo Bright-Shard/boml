@@ -1,13 +1,8 @@
-use crate::types::{Key, TomlString};
-
-use {
-    crate::types::{TomlValue, ValueType},
-    std::collections::HashMap,
-};
+use {crate::crate_prelude::*, std::collections::HashMap};
 
 #[derive(Debug, PartialEq, Default)]
 pub struct Table<'a> {
-    pub map: HashMap<TomlString<'a>, TomlValue<'a>>,
+    map: HashMap<TomlString<'a>, TomlValue<'a>>,
 }
 impl<'a> Table<'a> {
     /// Gets the value for a key. If you know what type the value should be,
@@ -16,6 +11,16 @@ impl<'a> Table<'a> {
     #[inline(always)]
     pub fn get(&self, key: &str) -> Option<&TomlValue<'a>> {
         self.map.get(key)
+    }
+
+    /// The number of entries in this table.
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
     }
 
     /// Gets the value for a key, if that value is a table.
