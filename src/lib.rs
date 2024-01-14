@@ -202,6 +202,10 @@ mod crate_prelude {
     };
 }
 
+pub mod prelude {
+    pub use crate::{Error as TomlError, ErrorKind as TomlErrorKind, Toml};
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
