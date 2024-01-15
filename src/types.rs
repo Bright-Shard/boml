@@ -1,145 +1,111 @@
-use {
-    crate::crate_prelude::*,
-    std::{borrow::Borrow, fmt::Display, hash::Hash, ops::Deref},
-};
+use crate::crate_prelude::*;
 
+/// A value in TOML.
 #[derive(Debug, PartialEq)]
 pub enum TomlValue<'a> {
-    String(TomlString<'a>),
-    Integer(i64),
-    Float(f64),
-    Boolean(bool),
-    OffsetDateTime,
-    LocalDateTime,
-    LocalDate,
-    LocalTime,
-    Array(Vec<Self>),
-    Table(Table<'a>),
+	/// A basic or literal string. If it's a basic string with escapes,
+	/// those escapes have already been processed.
+	String(TomlString<'a>),
+	/// An integer.
+	Integer(i64),
+	/// A float.
+	Float(f64),
+	/// A boolean.
+	Boolean(bool),
+	/// Time values are currently unsupported.
+	OffsetDateTime,
+	/// Time values are currently unsupported.
+	LocalDateTime,
+	/// Time values are currently unsupported.
+	LocalDate,
+	/// Time values are currently unsupported.
+	LocalTime,
+	/// An array of TOML values. They do not have to be the same type.
+	Array(Vec<Self>),
+	/// A table of key/value pairs.
+	Table(Table<'a>),
 }
 impl<'a> TomlValue<'a> {
-    pub fn ty(&self) -> ValueType {
-        match *self {
-            Self::String(_) => ValueType::String,
-            Self::Integer(_) => ValueType::Integer,
-            Self::Float(_) => ValueType::Float,
-            Self::Boolean(_) => ValueType::Boolean,
-            Self::OffsetDateTime => ValueType::OffsetDateTime,
-            Self::LocalDateTime => ValueType::LocalDateTime,
-            Self::LocalDate => ValueType::LocalDate,
-            Self::LocalTime => ValueType::LocalTime,
-            Self::Array(_) => ValueType::Array,
-            Self::Table(_) => ValueType::Table,
-        }
-    }
+	/// The type of this value.
+	pub fn value_type(&self) -> TomlValueType {
+		match *self {
+			Self::String(_) => TomlValueType::String,
+			Self::Integer(_) => TomlValueType::Integer,
+			Self::Float(_) => TomlValueType::Float,
+			Self::Boolean(_) => TomlValueType::Boolean,
+			Self::OffsetDateTime => TomlValueType::OffsetDateTime,
+			Self::LocalDateTime => TomlValueType::LocalDateTime,
+			Self::LocalDate => TomlValueType::LocalDate,
+			Self::LocalTime => TomlValueType::LocalTime,
+			Self::Array(_) => TomlValueType::Array,
+			Self::Table(_) => TomlValueType::Table,
+		}
+	}
 
-    pub fn string(&self) -> Option<&str> {
-        match self {
-            Self::String(string) => Some(string.as_str()),
-            _ => None,
-        }
-    }
-    pub fn integer(&self) -> Option<i64> {
-        match self {
-            Self::Integer(num) => Some(*num),
-            _ => None,
-        }
-    }
-    pub fn float(&self) -> Option<f64> {
-        match self {
-            Self::Float(num) => Some(*num),
-            _ => None,
-        }
-    }
-    pub fn boolean(&self) -> Option<bool> {
-        match self {
-            Self::Boolean(bool_) => Some(*bool_),
-            _ => None,
-        }
-    }
-    pub fn array(&self) -> Option<&Vec<Self>> {
-        match self {
-            Self::Array(array) => Some(array),
-            _ => None,
-        }
-    }
-    pub fn table(&self) -> Option<&Table<'a>> {
-        match self {
-            Self::Table(table) => Some(table),
-            _ => None,
-        }
-    }
+	/// Returns the string within this value, if it's a string; otherwise, fails.
+	pub fn string(&self) -> Option<&str> {
+		match self {
+			Self::String(string) => Some(string.as_str()),
+			_ => None,
+		}
+	}
+	/// Returns the number within this value, if it's an integer; otherwise, fails.
+	pub fn integer(&self) -> Option<i64> {
+		match self {
+			Self::Integer(num) => Some(*num),
+			_ => None,
+		}
+	}
+	/// Returns the number within this value, if it's a float; otherwise, fails.
+	pub fn float(&self) -> Option<f64> {
+		match self {
+			Self::Float(num) => Some(*num),
+			_ => None,
+		}
+	}
+	/// Returns the boolean within this value, if it's a boolean; otherwise, fails.
+	pub fn boolean(&self) -> Option<bool> {
+		match self {
+			Self::Boolean(bool_) => Some(*bool_),
+			_ => None,
+		}
+	}
+	/// Returns the array within this value, if it's an array; otherwise, fails.
+	pub fn array(&self) -> Option<&Vec<Self>> {
+		match self {
+			Self::Array(array) => Some(array),
+			_ => None,
+		}
+	}
+	/// Returns the table within this value, if it's a table; otherwise, fails.
+	pub fn table(&self) -> Option<&Table<'a>> {
+		match self {
+			Self::Table(table) => Some(table),
+			_ => None,
+		}
+	}
 }
 
+/// The basic value types in TOML.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ValueType {
-    String,
-    Integer,
-    Float,
-    Boolean,
-    OffsetDateTime,
-    LocalDateTime,
-    LocalDate,
-    LocalTime,
-    Array,
-    Table,
+pub enum TomlValueType {
+	String,
+	Integer,
+	Float,
+	Boolean,
+	OffsetDateTime,
+	LocalDateTime,
+	LocalDate,
+	LocalTime,
+	Array,
+	Table,
 }
 
-#[derive(Debug)]
-pub enum TomlString<'a> {
-    Formatted(Span<'a>, String),
-    Raw(Span<'a>),
-}
-impl<'a> TomlString<'a> {
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        self.borrow()
-    }
-
-    pub fn span(&self) -> &Span<'a> {
-        match self {
-            Self::Formatted(span, _) => span,
-            Self::Raw(span) => span,
-        }
-    }
-}
-impl<'a> Borrow<str> for TomlString<'a> {
-    fn borrow(&self) -> &str {
-        match self {
-            TomlString::Formatted(_, ref string) => string.as_str(),
-            TomlString::Raw(span) => span.as_str(),
-        }
-    }
-}
-impl<'a> Deref for TomlString<'a> {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.borrow()
-    }
-}
-impl<'a> PartialEq for TomlString<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_str() == other.as_str()
-    }
-}
-impl<'a> Eq for TomlString<'a> {}
-impl<'a> Hash for TomlString<'a> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_str().hash(state)
-    }
-}
-impl<'a> Display for TomlString<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.as_str().fmt(f)
-    }
-}
-impl<'a> From<Span<'a>> for TomlString<'a> {
-    fn from(value: Span<'a>) -> Self {
-        Self::Raw(value)
-    }
-}
-
+/// A key in a key/value pair or table name.
 pub struct Key<'a> {
-    pub text: TomlString<'a>,
-    pub child: Option<Box<Key<'a>>>,
+	/// The name of this key.
+	pub text: TomlString<'a>,
+	/// This is only present in dotted keys. It stores the next "child" key
+	/// that comes after the dot.
+	pub child: Option<Box<Key<'a>>>,
 }
