@@ -1,6 +1,13 @@
-use std::ops::{Bound, RangeBounds};
+//! Defines internal boml types used for handling text.
 
-/// Represents a text input to be parsed.
+use std::{
+	borrow::Borrow,
+	fmt::{Debug, Display},
+	hash::Hash,
+	ops::{Bound, RangeBounds},
+};
+
+/// This is an internal boml type. It represents all of the text input to be parsed.
 #[derive(Debug)]
 pub struct Text<'a> {
 	/// The text to be parsed.
@@ -70,8 +77,86 @@ impl<'a: 'b, 'b> Text<'a> {
 	}
 }
 
-/// A specific section of text from [`Text`].
-#[derive(Debug, PartialEq)]
+/// This is an internal boml type - if you've somehow ended up with a `CowSpan`, you
+/// should probably use the [`CowSpan::as_str()`] method and get a normal string.
+///
+/// This is essentially [`std::borrow::Cow`] for [`Span`]. It provides a few traits
+/// that `Cow` doesn't.
+pub enum CowSpan<'a> {
+	Raw(Span<'a>),
+	Modified(Span<'a>, String),
+}
+impl CowSpan<'_> {
+	/// Converts the `CowSpan` to a [`str`].
+	#[inline(always)]
+	pub fn as_str(&self) -> &str {
+		match self {
+			Self::Raw(ref raw) => &raw.source[raw.start..=raw.end],
+			Self::Modified(_, ref modified) => modified,
+		}
+	}
+
+	/// Gets the span of the original, unmodified text that made this `CowSpan`.
+	#[inline(always)]
+	pub fn span(&self) -> &Span<'_> {
+		match self {
+			Self::Raw(ref span) => span,
+			Self::Modified(ref span, _) => span,
+		}
+	}
+}
+impl Hash for CowSpan<'_> {
+	#[inline(always)]
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		self.as_str().hash(state)
+	}
+}
+impl Borrow<str> for CowSpan<'_> {
+	#[inline(always)]
+	fn borrow(&self) -> &str {
+		self.as_str()
+	}
+}
+impl PartialEq for CowSpan<'_> {
+	#[inline(always)]
+	fn eq(&self, other: &Self) -> bool {
+		self.as_str().eq(other.as_str())
+	}
+}
+impl Eq for CowSpan<'_> {}
+impl Debug for CowSpan<'_> {
+	#[inline(always)]
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Raw(span) => {
+				write!(
+					f,
+					"Span from `{}` to `{}`: `{}`",
+					span.start,
+					span.end,
+					span.as_str()
+				)
+			}
+			Self::Modified(span, string) => {
+				write!(
+					f,
+					"Modified span from `{}` to `{}`: Original is `{}`, modified is `{}`",
+					span.start,
+					span.end,
+					span.as_str(),
+					string
+				)
+			}
+		}
+	}
+}
+impl Display for CowSpan<'_> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.as_str())
+	}
+}
+
+/// This is an internal boml type. It represents a specific section of text from [`Text`].
 pub struct Span<'a> {
 	/// Inclusive start of this span of text.
 	pub start: usize,
@@ -80,7 +165,7 @@ pub struct Span<'a> {
 	/// The entire text this span is extracted from.
 	pub source: &'a str,
 }
-impl<'a: 'b, 'b> Span<'a> {
+impl<'a: 'borrow, 'borrow> Span<'a> {
 	/// Finds the location of a character in this span, and returns its location,
 	/// relative to the entire text this span comes from.
 	pub fn find(&self, val: u8) -> Option<usize> {
@@ -142,7 +227,18 @@ impl<'a: 'b, 'b> Span<'a> {
 	}
 	/// Identical to [`Span::as_str`], but it consumes `self`.
 	#[inline]
-	pub fn to_str(self) -> &'b str {
+	pub fn to_str(self) -> &'borrow str {
 		&self.source[self.start..=self.end]
+	}
+}
+impl Debug for Span<'_> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(
+			f,
+			"Span from `{}` to `{}`: `{}`",
+			self.start,
+			self.end,
+			self.as_str()
+		)
 	}
 }

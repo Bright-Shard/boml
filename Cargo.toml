@@ -1,6 +1,6 @@
 [package]
 name = "boml"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["BrightShard <brightshard@brightshard.dev>"]
 description = "A dependency-free, (almost) 0-copy TOML parser."

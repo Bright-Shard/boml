@@ -1,11 +1,16 @@
+//! Defines [`Key`]s and [`Value`]s in TOML.
+//!
+//! [`Value`]: TomlValue
+
 use crate::crate_prelude::*;
+use crate::text::*;
 
 /// A value in TOML.
 #[derive(Debug, PartialEq)]
 pub enum TomlValue<'a> {
 	/// A basic or literal string. If it's a basic string with escapes,
 	/// those escapes have already been processed.
-	String(TomlString<'a>),
+	String(CowSpan<'a>),
 	/// An integer.
 	Integer(i64),
 	/// A float.
@@ -104,7 +109,7 @@ pub enum TomlValueType {
 /// A key in a key/value pair or table name.
 pub struct Key<'a> {
 	/// The name of this key.
-	pub text: TomlString<'a>,
+	pub text: CowSpan<'a>,
 	/// This is only present in dotted keys. It stores the next "child" key
 	/// that comes after the dot.
 	pub child: Option<Box<Key<'a>>>,

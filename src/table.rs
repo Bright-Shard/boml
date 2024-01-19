@@ -1,34 +1,21 @@
-use {crate::crate_prelude::*, std::collections::HashMap};
+//! Defines the [`Table`] type.
+
+use {
+	crate::crate_prelude::*,
+	std::{collections::HashMap, ops::Deref},
+};
 
 /// A set of key/value pairs in TOML.
 #[derive(Debug, PartialEq, Default)]
 pub struct Table<'a> {
-	map: HashMap<TomlString<'a>, TomlValue<'a>>,
+	map: HashMap<CowSpan<'a>, TomlValue<'a>>,
 }
 impl<'a> Table<'a> {
-	/// Gets the value for a key. If you know what type the value should be,
-	/// it's recommended to use a `get_<type>` method instead, as they simplify
-	/// some issues (like literal vs basic strings).
-	#[inline(always)]
-	pub fn get(&self, key: &str) -> Option<&TomlValue<'a>> {
-		self.map.get(key)
-	}
-
-	/// The number of entries in this table.
-	#[inline(always)]
-	pub fn len(&self) -> usize {
-		self.map.len()
-	}
-	#[inline(always)]
-	pub fn is_empty(&self) -> bool {
-		self.map.is_empty()
-	}
-
 	/// Gets the value for a key, if that value is a table.
 	pub fn get_table(&self, key: &str) -> Result<&Self, TomlGetError<'_, 'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
-			Some(val) => {
+			Some(ref val) => {
 				if let TomlValue::Table(table) = val {
 					Ok(table)
 				} else {
@@ -41,7 +28,7 @@ impl<'a> Table<'a> {
 	pub fn get_string(&self, key: &str) -> Result<&str, TomlGetError<'_, 'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
-			Some(val) => match val {
+			Some(ref val) => match val {
 				TomlValue::String(string) => Ok(string.as_str()),
 				other_val => Err(TomlGetError::TypeMismatch(
 					other_val,
@@ -54,7 +41,7 @@ impl<'a> Table<'a> {
 	pub fn get_integer(&self, key: &str) -> Result<i64, TomlGetError<'_, 'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
-			Some(val) => {
+			Some(ref val) => {
 				if let TomlValue::Integer(int) = val {
 					Ok(*int)
 				} else {
@@ -67,7 +54,7 @@ impl<'a> Table<'a> {
 	pub fn get_float(&self, key: &str) -> Result<f64, TomlGetError<'_, 'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
-			Some(val) => {
+			Some(ref val) => {
 				if let TomlValue::Float(float) = val {
 					Ok(*float)
 				} else {
@@ -80,7 +67,7 @@ impl<'a> Table<'a> {
 	pub fn get_boolean(&self, key: &str) -> Result<bool, TomlGetError<'_, 'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
-			Some(val) => {
+			Some(ref val) => {
 				if let TomlValue::Boolean(bool) = val {
 					Ok(*bool)
 				} else {
@@ -93,7 +80,7 @@ impl<'a> Table<'a> {
 	pub fn get_array(&self, key: &str) -> Result<&Vec<TomlValue<'a>>, TomlGetError<'_, 'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
-			Some(val) => {
+			Some(ref val) => {
 				if let TomlValue::Array(array) = val {
 					Ok(array)
 				} else {
@@ -139,6 +126,19 @@ impl<'a> Table<'a> {
 		} else {
 			Some(self.map.entry(key.text).or_insert(value))
 		}
+	}
+
+	/// Iterates over the (key, value) pairs in this table. This replaces the [`HashMap`]'s normal iter method,
+	/// so that the keys are normal `&str`s instead of boml's internal [`CowSpan`] string type.
+	pub fn iter(&self) -> impl Iterator<Item = (&str, &TomlValue<'_>)> {
+		self.map.iter().map(|(k, v)| (k.as_str(), v))
+	}
+}
+impl<'a> Deref for Table<'a> {
+	type Target = HashMap<CowSpan<'a>, TomlValue<'a>>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.map
 	}
 }
 

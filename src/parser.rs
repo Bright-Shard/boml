@@ -1,9 +1,12 @@
-//! Parsers for each part of TOML - keys, values, and arrays. Each parser is only responsible
-//! for the length of the data it parses. Extraneous whitespace, comments, or invalid characters
-//! fall outside the scope of the parsers. Parsers assume that the current index in the [`Text`]
-//! is the first character of what they should parse - ie, the first letter of a key, opening
-//! quote of a quoted key, opening bracket of a table, etc. Each parser should leave `text.idx`
-//! at the last byte of the value it parsed.
+//! Parsers for each part of TOML - keys, values, and arrays.
+//!
+//! Parser rules:
+//! 1. Each parser is only responsible for the length of the data it parses. Extraneous whitespace,
+//! comments, or invalid characters fall outside the scope of the parsers.
+//! 2. Parsers assume that the current index in the [`Text`] is the first character of what they
+//! should parse - ie, the first letter of a key, opening quote of a quoted key, opening bracket
+//! of a table, etc.
+//! 3. Each parser should leave `text.idx` at the last byte it parsed.
 
 use {crate::crate_prelude::*, std::num::IntErrorKind};
 
@@ -70,13 +73,13 @@ pub fn parse_key<'a>(text: &mut Text<'a>) -> Result<Key<'a>, Error> {
 				text.skip_whitespace();
 
 				Ok(Key {
-					text: TomlString::Raw(span),
+					text: CowSpan::Raw(span),
 					child: Some(Box::new(parse_key(text)?)),
 				})
 			} else {
 				text.idx = current - 1;
 				Ok(Key {
-					text: TomlString::Raw(span),
+					text: CowSpan::Raw(span),
 					child: None,
 				})
 			}
@@ -89,27 +92,63 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 	match text.current_byte().unwrap() {
 		// Integer, time, or float
 		b'0'..=b'9' => {
-			let mut span = text.excerpt(text.idx..);
-			if let Some(end_idx) = span.find_next_whitespace_or_newline() {
-				span.end = end_idx - 1;
-			}
-
-			// Integer with custom radix
-			let radix = if text.remaining_bytes() > 1 && text.current_byte().unwrap() == b'0' {
-				match text.byte(text.idx + 1).unwrap() {
-					b'b' => Some(2),
-					b'o' => Some(8),
-					b'x' => Some(16),
-					_ => None,
-				}
-			} else {
-				None
+			let mut span = Span {
+				start: text.idx,
+				end: text.idx,
+				source: text.text,
 			};
+
+			let mut radix = None;
+			let mut has_underscores = false;
+			let mut is_float = false;
+			let mut is_time = false;
+			let opening_zero = text.current_byte() == Some(b'0');
+
+			while let Some(byte) = text.byte(span.end + 1) {
+				match byte {
+					b'0'..=b'9' => {}
+
+					b'.' | b'e' | b'E' | b'+' => is_float = true,
+
+					// Need a better way to handle this
+					b'-' => {
+						is_float = true;
+						is_time = true;
+					}
+
+					b':' => is_time = true,
+
+					b'_' => has_underscores = true,
+
+					b'b' if opening_zero && span.len() == 1 => {
+						radix = Some(2);
+					}
+					b'o' if opening_zero && span.len() == 1 => {
+						radix = Some(8);
+					}
+					b'x' if opening_zero && span.len() == 1 => {
+						radix = Some(16);
+					}
+
+					_ => break,
+				}
+				span.end += 1;
+			}
+			text.idx = span.end;
+
 			if radix.is_some() {
+				if is_float || is_time {
+					return Err(Error {
+						start: span.start,
+						end: span.start + 1,
+						kind: ErrorKind::NumberHasInvalidBaseOrLeadingZero,
+					});
+				}
+
 				span.start += 2;
 			}
 
-			let source = if span.find(b'_').is_some() {
+			let source = if has_underscores {
 				let mut string = String::with_capacity(span.len());
 				for char_ in span.as_str().chars() {
 					if char_ != '_' {
@@ -117,34 +156,25 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 					}
 				}
 
-				TomlString::Formatted(span, string)
+				CowSpan::Modified(span, string)
 			} else {
-				TomlString::Raw(span)
+				CowSpan::Raw(span)
 			};
 			let span = source.span();
 
-			// Float
-			if radix.is_none()
-				&& (span.find(b'.').is_some()
-					|| span.find(b'e').is_some()
-					|| span.find(b'E').is_some())
-			{
+			if is_float {
 				// Unfortunately, the f64 parser doesn't give detailed error information, so this is the best we can do.
-				if let Ok(num) = source.parse() {
-					text.idx = span.end;
+				if let Ok(num) = source.as_str().parse() {
 					return Ok(TomlValue::Float(num));
 				}
 			}
 
-			// Time
-			if radix.is_none() && (span.find(b'-').is_some() || span.find(b':').is_some()) {
-				todo!("Dates/times")
+			if is_time {
+				todo!()
 			}
 
-			// Integer
 			match i64::from_str_radix(source.as_str(), radix.unwrap_or(10)) {
 				Ok(num) => {
-					text.idx = span.end;
 					return Ok(TomlValue::Integer(num));
 				}
 				Err(e) => match e.kind() {
@@ -160,7 +190,6 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 				},
 			}
 
-			let span = text.excerpt(text.idx - 1..);
 			Err(Error {
 				start: span.start,
 				end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
@@ -266,7 +295,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 			loop {
 				text.skip_whitespace_and_newlines();
 
-				// Trailing comma support
+				// Trailing comma or empty array
 				if let Some(b']') = text.current_byte() {
 					break;
 				}
@@ -375,7 +404,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 
 /// Parses a string. Supports literal and basic strings. Handles basic string escapes
 /// automatically.
-pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<TomlString<'a>, Error> {
+pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, Error> {
 	let mut span = text.excerpt(text.idx..);
 
 	match text.current_byte().unwrap() {
@@ -402,7 +431,7 @@ pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<TomlString<'a>, Error> {
 			span.end = end - 1;
 			text.idx = span.end + offset;
 
-			Ok(TomlString::Raw(span))
+			Ok(CowSpan::Raw(span))
 		}
 		b'"' => {
 			let multiline = text.remaining_bytes() > 5
@@ -425,7 +454,7 @@ pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<TomlString<'a>, Error> {
 			if span.find(b'\\').is_some() {
 				handle_basic_string_escapes(text, span)
 			} else {
-				Ok(TomlString::Raw(span))
+				Ok(CowSpan::Raw(span))
 			}
 		}
 		_ => unreachable!(),
@@ -455,10 +484,7 @@ fn find_basic_string_end(span: &mut Span<'_>, text: &Text<'_>, multiline: bool) 
 	}
 }
 
-fn handle_basic_string_escapes<'a>(
-	text: &Text<'a>,
-	span: Span<'a>,
-) -> Result<TomlString<'a>, Error> {
+fn handle_basic_string_escapes<'a>(text: &Text<'a>, span: Span<'a>) -> Result<CowSpan<'a>, Error> {
 	let mut string = String::with_capacity(span.len());
 
 	let mut chars = span.as_str().char_indices().peekable();
@@ -540,5 +566,5 @@ fn handle_basic_string_escapes<'a>(
 		string.push(char_);
 	}
 
-	Ok(TomlString::Formatted(span, string))
+	Ok(CowSpan::Modified(span, string))
 }
