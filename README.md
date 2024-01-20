@@ -74,33 +74,17 @@ the actual TOML value and its type, so you can attempt to still use it if possib
 
 # Status/To-Do
 
-The time types (date, time, date-time) aren't of importance to BOML since the
-current goal is just to parse `Cargo.toml` files. They will be supported at
-some point in the future, but are not right now, hence why it's marked `(future)`.
+BOML can parse everything in TOML except for the date/time/date-time types. Its original goal was just to parse
+Rust config files, like `Cargo.toml`, for [bargo](https://github.com/bright-shard/bargo).
 
-- [x] Keys
-  - [x] Bare keys
-  - [x] Quoted keys
-  - [x] Dotted keys
-- [ ] Values
-  - [x] String
-    - [x] Basic string
-    - [x] Basic multiline string
-    - [x] Literal string
-    - [x] Literal multiline string
-  - [x] Integer
-  - [x] Float
-  - [x] Boolean
-  - [ ] Time (future)
-    - [ ] Local Date-Time
-    - [ ] Local Date
-    - [ ] Local Time
-  - [x] Array
-- [x] Tables
-  - [x] Table
-  - [x] Inline Table
-  - [x] Array of Tables
-  - [x] Array of Inline Tables
+BOML also may parse what is technically invalid TOML as valid TOML. It's current goal is to just parse TOML, so
+extra cases that are technically not valid TOML may not get caught.
+
+You can test BOML against the [official TOML test suite](https://github.com/toml-lang/toml-test) by running the
+`toml_test` test (`cargo t toml_test -- --show-output`). This test currently skips tests for the time types, and
+only prints warnings (instead of failing) if an invalid test passes. It also skips tests that don't have a valid
+UTF-8 encoding (since Rust strings require UTF-8). With those exceptions in place, BOML is able to pass the
+toml-test suite.
 
 # Why "(almost) zero-copy"?
 

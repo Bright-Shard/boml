@@ -49,12 +49,20 @@ impl<'a: 'b, 'b> Text<'a> {
 	/// The number of remaining bytes in the text, not including the current byte.
 	#[inline]
 	pub fn remaining_bytes(&self) -> usize {
-		self.text.len() - self.idx - 1
+		if self.idx >= self.text.len() {
+			0
+		} else {
+			self.text.len() - self.idx - 1
+		}
 	}
 
 	/// The last valid index into the text.
 	pub fn end(&self) -> usize {
-		self.text.len() - 1
+		if self.text.is_empty() {
+			0
+		} else {
+			self.text.len() - 1
+		}
 	}
 
 	/// Increments `self.idx` until it hits a non-whitespace character.

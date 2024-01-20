@@ -40,8 +40,8 @@ pub fn parse_assignment<'a>(text: &mut Text<'a>) -> Result<(Key<'a>, TomlValue<'
 
 /// Parses a key. Supports quoted, dotted, and bare keys.
 pub fn parse_key<'a>(text: &mut Text<'a>) -> Result<Key<'a>, Error> {
-	match text.current_byte().unwrap() {
-		b'\'' | b'"' => parse_string(text).map(|text| Key { text, child: None }),
+	let maybe_key = match text.current_byte().unwrap() {
+		b'\'' | b'"' => parse_string(text)?,
 		_ => {
 			let start = text.idx;
 			let mut current = text.idx;
@@ -62,28 +62,40 @@ pub fn parse_key<'a>(text: &mut Text<'a>) -> Result<Key<'a>, Error> {
 					kind: ErrorKind::NoValueInAssignment,
 				});
 			}
+			if start == current {
+				// Empty bare keys are not allowed
+				return Err(Error {
+					start,
+					end: current,
+					kind: ErrorKind::InvalidBareKey,
+				});
+			}
 
 			let span = text.excerpt(start..current);
+			text.idx = current - 1;
 
-			// Check for dotted key
-			text.idx = current;
-			text.skip_whitespace();
-			if text.current_byte() == Some(b'.') {
-				text.idx += 1;
-				text.skip_whitespace();
-
-				Ok(Key {
-					text: CowSpan::Raw(span),
-					child: Some(Box::new(parse_key(text)?)),
-				})
-			} else {
-				text.idx = current - 1;
-				Ok(Key {
-					text: CowSpan::Raw(span),
-					child: None,
-				})
-			}
+			CowSpan::Raw(span)
 		}
+	};
+
+	// Check for dotted key
+	let key_end = text.idx;
+	text.idx += 1;
+	text.skip_whitespace();
+	if text.current_byte() == Some(b'.') {
+		text.idx += 1;
+		text.skip_whitespace();
+
+		Ok(Key {
+			text: maybe_key,
+			child: Some(Box::new(parse_key(text)?)),
+		})
+	} else {
+		text.idx = key_end;
+		Ok(Key {
+			text: maybe_key,
+			child: None,
+		})
 	}
 }
 
@@ -91,168 +103,18 @@ pub fn parse_key<'a>(text: &mut Text<'a>) -> Result<Key<'a>, Error> {
 pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 	match text.current_byte().unwrap() {
 		// Integer, time, or float
-		b'0'..=b'9' => {
-			let mut span = Span {
-				start: text.idx,
-				end: text.idx,
-				source: text.text,
-			};
-
-			let mut radix = None;
-			let mut has_underscores = false;
-			let mut is_float = false;
-			let mut is_time = false;
-			let opening_zero = text.current_byte() == Some(b'0');
-
-			while let Some(byte) = text.byte(span.end + 1) {
-				match byte {
-					b'0'..=b'9' => {}
-
-					b'.' | b'e' | b'E' | b'+' => is_float = true,
-
-					// Need a better way to handle this
-					b'-' => {
-						is_float = true;
-						is_time = true;
-					}
-
-					b':' => is_time = true,
-
-					b'_' => has_underscores = true,
-
-					b'b' if opening_zero && span.len() == 1 => {
-						radix = Some(2);
-					}
-					b'o' if opening_zero && span.len() == 1 => {
-						radix = Some(8);
-					}
-					b'x' if opening_zero && span.len() == 1 => {
-						radix = Some(16);
-					}
-
-					_ => break,
-				}
-				span.end += 1;
-			}
-			text.idx = span.end;
-
-			if radix.is_some() {
-				if is_float || is_time {
-					return Err(Error {
-						start: span.start,
-						end: span.start + 1,
-						kind: ErrorKind::NumberHasInvalidBaseOrLeadingZero,
-					});
-				}
-
-				span.start += 2;
-			}
-
-			let source = if has_underscores {
-				let mut string = String::with_capacity(span.len());
-				for char_ in span.as_str().chars() {
-					if char_ != '_' {
-						string.push(char_);
-					}
-				}
-
-				CowSpan::Modified(span, string)
-			} else {
-				CowSpan::Raw(span)
-			};
-			let span = source.span();
-
-			if is_float {
-				// Unfortunately, the f64 parser doesn't give detailed error information, so this is the best we can do.
-				if let Ok(num) = source.as_str().parse() {
-					return Ok(TomlValue::Float(num));
-				}
-			}
-
-			if is_time {
-				todo!()
-			}
-
-			match i64::from_str_radix(source.as_str(), radix.unwrap_or(10)) {
-				Ok(num) => {
-					return Ok(TomlValue::Integer(num));
-				}
-				Err(e) => match e.kind() {
-					IntErrorKind::NegOverflow | IntErrorKind::PosOverflow => {
-						return Err(Error {
-							start: span.start,
-							end: span.end,
-							kind: ErrorKind::NumberTooLarge,
-						});
-					}
-					IntErrorKind::InvalidDigit => {}
-					_ => unreachable!(),
-				},
-			}
-
-			Err(Error {
-				start: span.start,
-				end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
-				kind: ErrorKind::UnrecognisedValue,
-			})
-		}
-
-		// Infinity/NaN float
-		b'i' if text.remaining_bytes() >= 2 => {
-			let span = text.excerpt(text.idx..text.idx + 3);
-			if span.as_str() == "inf" {
-				text.idx = span.end;
-				Ok(TomlValue::Float(f64::INFINITY))
-			} else {
-				let span = text.excerpt(text.idx - 1..);
-				Err(Error {
-					start: span.start,
-					end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
-					kind: ErrorKind::UnrecognisedValue,
-				})
-			}
-		}
-		b'n' if text.remaining_bytes() >= 2 => {
-			let span = text.excerpt(text.idx..text.idx + 3);
-			if span.as_str() == "nan" {
-				text.idx = span.end;
-				Ok(TomlValue::Float(f64::NAN))
-			} else {
-				let span = text.excerpt(text.idx - 1..);
-				Err(Error {
-					start: span.start,
-					end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
-					kind: ErrorKind::UnrecognisedValue,
-				})
-			}
-		}
+		b'0'..=b'9' | b'i' | b'n' => parse_num(text, false),
 
 		// Integer or float with +/- modifier
 		b'+' if text.remaining_bytes() > 0 => {
 			text.idx += 1;
-			parse_value(text)
+
+			parse_num(text, false)
 		}
 		b'-' if text.remaining_bytes() > 0 => {
 			text.idx += 1;
 
-			match parse_value(text) {
-				Ok(val) => match val {
-					TomlValue::Integer(num) => Ok(TomlValue::Integer(-num)),
-					TomlValue::Float(num) => Ok(TomlValue::Float(-num)),
-					_ => {
-						let span = text.excerpt(text.idx - 1..);
-						Err(Error {
-							start: span.start,
-							end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
-							kind: ErrorKind::UnrecognisedValue,
-						})
-					}
-				},
-				Err(mut e) => {
-					e.end -= 1;
-					Err(e)
-				}
-			}
+			parse_num(text, true)
 		}
 
 		// String
@@ -289,15 +151,49 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 
 			let mut array = Vec::new();
 			let mut span = text.excerpt(text.idx..);
-
+			let mut seen_comma = true;
 			text.idx += 1;
 
 			loop {
 				text.skip_whitespace_and_newlines();
 
-				// Trailing comma or empty array
-				if let Some(b']') = text.current_byte() {
-					break;
+				match text.current_byte() {
+					Some(b']') => break,
+					Some(b',') => {
+						text.idx += 1;
+						text.skip_whitespace_and_newlines();
+						if text.remaining_bytes() == 0 {
+							return Err(Error {
+								start: span.start,
+								end: text.idx,
+								kind: ErrorKind::UnclosedBracket,
+							});
+						}
+
+						seen_comma = true;
+						continue;
+					}
+					Some(b'#') => {
+						text.idx = text.excerpt(text.idx..).find(b'\n').unwrap_or(text.end());
+						text.skip_whitespace_and_newlines();
+
+						continue;
+					}
+					Some(_) if !seen_comma => {
+						return Err(Error {
+							start: text.idx,
+							end: text.idx,
+							kind: ErrorKind::NoCommaDelimeter,
+						})
+					}
+					Some(_) => {}
+					None => {
+						return Err(Error {
+							start: span.start,
+							end: text.idx,
+							kind: ErrorKind::UnclosedBracket,
+						})
+					}
 				}
 
 				let value = parse_value(text)?;
@@ -305,27 +201,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 				span.end = text.idx;
 
 				text.idx += 1;
-				text.skip_whitespace_and_newlines();
-				match text.current_byte() {
-					Some(b']') => break,
-					Some(b',') => {}
-					Some(_) => {
-						return Err(Error {
-							start: text.idx,
-							end: text.idx,
-							kind: ErrorKind::NoCommaDelimeter,
-						})
-					}
-					None => {
-						return Err(Error {
-							start: span.start,
-							end: span.end,
-							kind: ErrorKind::UnclosedBracket,
-						})
-					}
-				}
-
-				text.idx += 1;
+				seen_comma = false;
 			}
 
 			Ok(TomlValue::Array(array))
@@ -348,6 +224,11 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 
 			loop {
 				text.skip_whitespace();
+
+				// Empty table
+				if text.current_byte() == Some(b'}') {
+					break;
+				}
 
 				let (key, value) = parse_assignment(text)?;
 				let start = key.text.span().start;
@@ -402,6 +283,198 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, Error> {
 	}
 }
 
+fn parse_num<'a>(text: &mut Text<'a>, negative: bool) -> Result<TomlValue<'a>, Error> {
+	let mut span = Span {
+		start: text.idx,
+		end: text.idx,
+		source: text.text,
+	};
+
+	// inf or nan
+	let current_byte = text.current_byte().unwrap();
+	if (current_byte == b'i' || current_byte == b'n') && text.remaining_bytes() >= 2 {
+		span.end += 2;
+		if span.as_str() == "inf" {
+			text.idx = span.end;
+			if negative {
+				return Ok(TomlValue::Float(-f64::INFINITY));
+			} else {
+				return Ok(TomlValue::Float(f64::INFINITY));
+			}
+		} else if span.as_str() == "nan" {
+			text.idx = span.end;
+			if negative {
+				return Ok(TomlValue::Float(-f64::NAN));
+			} else {
+				return Ok(TomlValue::Float(f64::NAN));
+			}
+		}
+	}
+
+	let mut has_underscores = false;
+	let mut is_float = false;
+	let mut is_time = false;
+
+	// Custom radix
+	let radix = if current_byte == b'0' {
+		match text.byte(span.end + 1) {
+			Some(b'b') => {
+				span.end += 1;
+				while let Some(byte) = text.byte(span.end + 1) {
+					if byte == b'0' || byte == b'1' {
+						span.end += 1;
+					} else if byte == b'_' {
+						has_underscores = true;
+						span.end += 1;
+					} else {
+						break;
+					}
+				}
+
+				Some(2)
+			}
+			Some(b'o') => {
+				span.end += 1;
+				while let Some(byte) = text.byte(span.end + 1) {
+					match byte {
+						b'0'..=b'7' => span.end += 1,
+						b'_' => {
+							has_underscores = true;
+							span.end += 1;
+						}
+						_ => break,
+					}
+				}
+
+				Some(8)
+			}
+			Some(b'x') => {
+				span.end += 1;
+				while let Some(byte) = text.byte(span.end + 1) {
+					match byte {
+						b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' => span.end += 1,
+						b'_' => {
+							has_underscores = true;
+							span.end += 1;
+						}
+						_ => break,
+					}
+				}
+
+				Some(16)
+			}
+			_ => None,
+		}
+	} else {
+		None
+	};
+
+	if radix.is_none() {
+		let mut has_dash = false;
+
+		while let Some(byte) = text.byte(span.end + 1) {
+			match byte {
+				b'0'..=b'9' => {}
+
+				b'.' | b'e' | b'E' | b'+' => is_float = true,
+
+				b':' => is_time = true,
+
+				// Can be in floats (1e-4) and time (1974-12-03)
+				b'-' => has_dash = true,
+
+				b'_' => has_underscores = true,
+
+				_ => break,
+			}
+			span.end += 1;
+		}
+
+		if is_float && is_time {
+			return Err(Error {
+				start: span.start,
+				end: span.end,
+				kind: ErrorKind::InvalidNumber,
+			});
+		} else if !is_float && has_dash {
+			is_time = true;
+		}
+	}
+
+	if radix.is_some() {
+		span.start += 2;
+	}
+	text.idx = span.end;
+
+	let source = if has_underscores {
+		let mut string = String::with_capacity(span.len());
+		for char_ in span.as_str().chars() {
+			if char_ != '_' {
+				string.push(char_);
+			}
+		}
+
+		CowSpan::Modified(span, string)
+	} else {
+		CowSpan::Raw(span)
+	};
+	let span = source.span();
+
+	if is_float {
+		// Unfortunately, the f64 parser doesn't give detailed error information, so this is the best we can do.
+		if let Ok(num) = source.as_str().parse::<f64>() {
+			if negative {
+				return Ok(TomlValue::Float(-num));
+			} else {
+				return Ok(TomlValue::Float(num));
+			}
+		}
+	}
+
+	if is_time && !negative {
+		todo!("Time types")
+	}
+
+	match i64::from_str_radix(source.as_str(), radix.unwrap_or(10)) {
+		Ok(num) => {
+			if negative {
+				return Ok(TomlValue::Integer(-num));
+			} else {
+				return Ok(TomlValue::Integer(num));
+			}
+		}
+		Err(e) => match e.kind() {
+			IntErrorKind::PosOverflow => {
+				// i64::MIN, as a string, without the sign
+				if negative && source.as_str() == "9223372036854775808" {
+					return Ok(TomlValue::Integer(i64::MIN));
+				}
+
+				return Err(Error {
+					start: span.start,
+					end: span.end,
+					kind: ErrorKind::NumberTooLarge,
+				});
+			}
+			IntErrorKind::InvalidDigit => {}
+			IntErrorKind::Empty => {
+				return Err(Error {
+					start: span.start,
+					end: span.end,
+					kind: ErrorKind::InvalidNumber,
+				})
+			}
+			_ => unreachable!(),
+		},
+	}
+
+	Err(Error {
+		start: span.start,
+		end: span.find_next_whitespace_or_newline().unwrap_or(text.end()),
+		kind: ErrorKind::UnrecognisedValue,
+	})
+}
+
 /// Parses a string. Supports literal and basic strings. Handles basic string escapes
 /// automatically.
 pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, Error> {
@@ -414,7 +487,21 @@ pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, Error> {
 			{
 				// Multi-line string
 				span.start += 3;
-				(span.as_str().find("'''").map(|idx| span.start + idx), 3)
+				if text.byte(span.start).unwrap() == b'\n' {
+					span.start += 1;
+				}
+				(
+					span.as_str().find("'''").map(|idx| {
+						let mut idx = span.start + idx;
+
+						while text.byte(idx) == Some(b'\'') {
+							idx += 1;
+						}
+
+						idx - 3
+					}),
+					3,
+				)
 			} else {
 				// Single-line string
 				span.start += 1;
@@ -449,6 +536,10 @@ pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, Error> {
 			span.start = start + offset;
 			span.end = end - 1;
 
+			if multiline && text.byte(span.start).unwrap() == b'\n' {
+				span.start += 1;
+			}
+
 			text.idx = span.end + offset;
 
 			if span.find(b'\\').is_some() {
@@ -465,7 +556,15 @@ fn find_basic_string_end(span: &mut Span<'_>, text: &Text<'_>, multiline: bool) 
 	let end = if multiline {
 		// Multi-line string
 		span.start += 3;
-		span.as_str().find("\"\"\"").map(|idx| span.start + idx)
+		span.as_str().find("\"\"\"").map(|idx| {
+			let mut idx = span.start + idx;
+
+			while text.byte(idx) == Some(b'"') {
+				idx += 1;
+			}
+
+			idx - 3
+		})
 	} else {
 		// Single-line string
 		span.start += 1;
@@ -488,17 +587,19 @@ fn handle_basic_string_escapes<'a>(text: &Text<'a>, span: Span<'a>) -> Result<Co
 	let mut string = String::with_capacity(span.len());
 
 	let mut chars = span.as_str().char_indices().peekable();
-	while let Some((idx, char_)) = chars.next() {
-		if char_ == '\\' {
-			let Some((_, char_)) = chars.next() else {
+	while let Some((idx, char)) = chars.next() {
+		let idx = span.start + idx;
+		if char == '\\' {
+			let Some((idx, char)) = chars.next() else {
 				return Err(Error {
-					start: span.start + idx,
-					end: span.start + idx,
+					start: idx,
+					end: idx,
 					kind: ErrorKind::UnknownEscapeSequence,
 				});
 			};
+			let idx = span.start + idx;
 
-			let to_push = match char_ {
+			let to_push = match char {
 				'b' => '\u{0008}',
 				't' => '\t',
 				'n' => '\n',
@@ -507,10 +608,16 @@ fn handle_basic_string_escapes<'a>(text: &Text<'a>, span: Span<'a>) -> Result<Co
 				'"' => '"',
 				'\\' => '\\',
 				'u' => {
-					let Some(char_) = text
-						.excerpt(idx + 2..idx + 6)
-						.as_str()
-						.parse()
+					if idx + 4 > text.end() {
+						return Err(Error {
+							start: idx,
+							end: idx + 4,
+							kind: ErrorKind::UnknownUnicodeScalar,
+						});
+					}
+
+					let source = text.excerpt(idx + 1..=idx + 4);
+					let Some(char) = u32::from_str_radix(source.as_str(), 16)
 						.ok()
 						.and_then(char::from_u32)
 					else {
@@ -521,24 +628,34 @@ fn handle_basic_string_escapes<'a>(text: &Text<'a>, span: Span<'a>) -> Result<Co
 						});
 					};
 
-					char_
+					chars.nth(3).unwrap();
+
+					char
 				}
 				'U' => {
-					let Some(char_) = text
-						.excerpt(idx + 2..idx + 10)
-						.as_str()
-						.parse()
+					if idx + 8 > text.end() {
+						return Err(Error {
+							start: idx,
+							end: idx + 8,
+							kind: ErrorKind::UnknownUnicodeScalar,
+						});
+					}
+
+					let source = text.excerpt(idx + 1..=idx + 8);
+					let Some(char) = u32::from_str_radix(source.as_str(), 16)
 						.ok()
 						.and_then(char::from_u32)
 					else {
 						return Err(Error {
 							start: idx,
-							end: idx + 9,
+							end: idx + 8,
 							kind: ErrorKind::UnknownUnicodeScalar,
 						});
 					};
 
-					char_
+					chars.nth(7).unwrap();
+
+					char
 				}
 				' ' | '\t' | '\n' | '\r' => {
 					while let Some((_, char_)) = chars.peek() {
@@ -563,7 +680,7 @@ fn handle_basic_string_escapes<'a>(text: &Text<'a>, span: Span<'a>) -> Result<Co
 			continue;
 		}
 
-		string.push(char_);
+		string.push(char);
 	}
 
 	Ok(CowSpan::Modified(span, string))

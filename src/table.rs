@@ -8,7 +8,7 @@ use {
 /// A set of key/value pairs in TOML.
 #[derive(Debug, PartialEq, Default)]
 pub struct Table<'a> {
-	map: HashMap<CowSpan<'a>, TomlValue<'a>>,
+	pub(crate) map: HashMap<CowSpan<'a>, TomlValue<'a>>,
 }
 impl<'a> Table<'a> {
 	/// Gets the value for a key, if that value is a table.
@@ -94,13 +94,22 @@ impl<'a> Table<'a> {
 	/// inserting the value overwrote another value.
 	pub(crate) fn insert(&mut self, key: Key<'a>, value: TomlValue<'a>) -> bool {
 		if let Some(child) = key.child {
-			let TomlValue::Table(ref mut table) = self
+			let possible_table = self
 				.map
 				.entry(key.text)
-				.or_insert(TomlValue::Table(Table::default()))
-			else {
-				return true;
+				.or_insert(TomlValue::Table(Table::default()));
+
+			let table = match possible_table {
+				TomlValue::Array(array) => {
+					let Some(TomlValue::Table(table)) = array.last_mut() else {
+						return true;
+					};
+					table
+				}
+				TomlValue::Table(table) => table,
+				_ => return true,
 			};
+
 			table.insert(*child, value)
 		} else {
 			self.map.insert(key.text, value).is_some()
@@ -114,12 +123,20 @@ impl<'a> Table<'a> {
 		value: TomlValue<'a>,
 	) -> Option<&mut TomlValue<'a>> {
 		if let Some(child) = key.child {
-			let TomlValue::Table(ref mut table) = self
+			let possible_table = self
 				.map
 				.entry(key.text)
-				.or_insert(TomlValue::Table(Table::default()))
-			else {
-				return None;
+				.or_insert(TomlValue::Table(Table::default()));
+
+			let table = match possible_table {
+				TomlValue::Array(array) => {
+					let Some(TomlValue::Table(table)) = array.last_mut() else {
+						return None;
+					};
+					table
+				}
+				TomlValue::Table(table) => table,
+				_ => return None,
 			};
 
 			table.get_or_insert_mut(*child, value)

@@ -179,6 +179,7 @@ fn floats() {
 #[test]
 fn tables() {
 	let toml_source = concat!(
+		"empty = {}\n",
 		"inline = { name = 'inline', num = inf }\n",
 		"\n",
 		"[table1]\n",
@@ -193,6 +194,8 @@ fn tables() {
 		"array2 = [1]\n",
 	);
 	let toml = Toml::parse(toml_source).unwrap();
+
+	let _empty = toml.get_table("empty").unwrap();
 
 	let inline = toml.get_table("inline").unwrap();
 	assert_eq!(inline.get_string("name"), Ok("inline"));

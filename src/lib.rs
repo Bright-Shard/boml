@@ -10,6 +10,7 @@ use {crate_prelude::*, std::ops::Deref};
 ///
 /// [`new()`]: Toml::new()
 /// [`parse()`]: Toml::parse()
+#[derive(Debug)]
 pub struct Toml<'a> {
 	table: Table<'a>,
 }
@@ -108,6 +109,11 @@ impl<'a> Toml<'a> {
 
 		Ok(Self { table: root_table })
 	}
+
+	/// Consumes the [`Toml<'_>`], producing a [`Table<'_>`].
+	pub fn into_table(self) -> Table<'a> {
+		self.table
+	}
 }
 impl<'a> Deref for Toml<'a> {
 	type Target = Table<'a>;
@@ -124,6 +130,7 @@ fn insert_subtable<'a>(
 	array: bool,
 ) -> Result<(), Error> {
 	let (start, end) = (key.text.span().start, key.text.span().end);
+
 	if array {
 		let Some(TomlValue::Array(array)) =
 			root_table.get_or_insert_mut(key, TomlValue::Array(Vec::new()))
@@ -136,13 +143,27 @@ fn insert_subtable<'a>(
 		};
 		array.push(TomlValue::Table(table));
 	} else {
-		let old = root_table.insert(key, TomlValue::Table(table));
-		if old {
+		let Some(TomlValue::Table(to_insert)) =
+			root_table.get_or_insert_mut(key, TomlValue::Table(Table::default()))
+		else {
 			return Err(Error {
 				start,
 				end,
 				kind: ErrorKind::ReusedKey,
 			});
+		};
+
+		for (key, value) in table.map {
+			let (start, end) = (key.span().start, key.span().end);
+			let old = to_insert.map.insert(key, value);
+
+			if old.is_some() {
+				return Err(Error {
+					start,
+					end,
+					kind: ErrorKind::ReusedKey,
+				});
+			}
 		}
 	}
 
