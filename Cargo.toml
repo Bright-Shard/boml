@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["BrightShard <brightshard@brightshard.dev>"]
 description = "A dead-simple, efficient, dependency-free TOML parser for Rust."
 repository = "https://github.com/bright-shard/boml"
+documentation = "https://docs.rs/boml"
 license = "MIT OR Apache-2.0"
 keywords = ["toml", "parser"]
 rust-version = "1.78.0"

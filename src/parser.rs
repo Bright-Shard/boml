@@ -59,7 +59,6 @@ pub fn parse<'a>(
 					text.next_n(2);
 					text.skip_whitespace();
 
-					dbg!(key.as_str());
 					let entry = table.map.entry(key.clone());
 
 					let mut table = TomlTable::default();

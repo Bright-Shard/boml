@@ -4,6 +4,7 @@ use std::{env, fs};
 /// how long it takes BOML to parse the entire toml test suite.
 /// This time will be somewhat bloated by the time it takes to load all the
 /// files in the test suite.
+#[ignore]
 #[test]
 fn toml_test_speed() {
 	let cwd = env::current_dir()

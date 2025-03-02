@@ -58,6 +58,11 @@ match package.get("name").unwrap() {
 You can also determine a value's type without touching its data, via the `.ty()` method and `TomlValueType` enum:
 
 ```rust
+use boml::prelude::TomlValueType;
+
+let source = include_str!("../Cargo.toml");
+let toml = boml::parse(source).unwrap();
+
 let package = toml.get("package").unwrap();
 assert_eq!(package.ty(), TomlValueType::Table);
 ```
@@ -106,7 +111,7 @@ TOML 1.1 is not currently supported, but support for it will be added if it's re
 
 # Efficiency
 
-BOML aims to be very fast. On a Framework 16, BOML parses the entire TOML test suite - ~1.8k lines of TOML - in ~.003 seconds. You can run this benchmark yourself with `cargo +nightly t toml_test_speed --release -- -Zunstable-options --report-time`.
+BOML aims to be very fast. On a Framework 16, BOML parses the entire TOML test suite - ~1.8k lines of TOML - in ~.003 seconds. You can run this benchmark yourself with `cargo +nightly t toml_test_speed --release -- -Zunstable-options --report-time --ignored`.
 
 Here's some more in-depth details on BOML's efficiency:
 
