@@ -1,6 +1,6 @@
 [package]
 name = "boml"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = ["BrightShard <brightshard@brightshard.dev>"]
 description = "A dead-simple, efficient, dependency-free TOML parser for Rust."
