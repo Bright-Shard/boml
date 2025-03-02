@@ -1,0 +1,19 @@
+name: Tests
+on: [push, workflow_dispatch]
+jobs:
+   Documentation-Tests:
+      runs-on: ubuntu-latest
+      env:
+         RUSTDOCFLAGS: -D warnings
+      steps:
+         - name: Checkout
+           uses: actions/checkout@v4
+         - name: Cargo Doc
+           run: cargo doc
+   Unit-Tests:
+      runs-on: ubuntu-latest
+      steps:
+         - name: Checkout
+           uses: actions/checkout@v4
+         - name: Cargo Test
+           run: cargo test -- --nocapture

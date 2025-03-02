@@ -213,9 +213,9 @@ fn tables() {
 	let array2 = table3.get_array("array2").unwrap();
 	assert_eq!(array.len(), 2);
 	assert_eq!(array2.len(), 1);
-	assert_eq!(array.first().unwrap().string().unwrap(), "hi");
-	assert_eq!(array.get(1).unwrap().string().unwrap(), "bye");
-	assert_eq!(array2.first().unwrap().integer().unwrap(), 1);
+	assert_eq!(array.first().unwrap().as_string().unwrap(), "hi");
+	assert_eq!(array.get(1).unwrap().as_string().unwrap(), "bye");
+	assert_eq!(array2.first().unwrap().as_integer().unwrap(), 1);
 }
 
 /// Test that boml can parse arrays.
@@ -231,20 +231,20 @@ fn arrays() {
 	let toml = Toml::parse(toml_source).unwrap();
 
 	let strings = toml.get_array("strings").unwrap();
-	let strings: Vec<&str> = strings.iter().map(|val| val.string().unwrap()).collect();
+	let strings: Vec<&str> = strings.iter().map(|val| val.as_string().unwrap()).collect();
 	assert_eq!(strings, vec!["hi", "hello", "how are you"]);
 
 	let mut nested = toml.get_array("nested").unwrap().iter();
-	assert_eq!(nested.next().unwrap().string().unwrap(), "me");
-	let mut subtable = nested.next().unwrap().array().unwrap().iter();
-	assert_eq!(subtable.next().unwrap().string().unwrap(), "when i");
-	assert_eq!(subtable.next().unwrap().string().unwrap(), "nest");
-	assert_eq!(nested.next().unwrap().string().unwrap(), "arrays");
+	assert_eq!(nested.next().unwrap().as_string().unwrap(), "me");
+	let mut subtable = nested.next().unwrap().as_array().unwrap().iter();
+	assert_eq!(subtable.next().unwrap().as_string().unwrap(), "when i");
+	assert_eq!(subtable.next().unwrap().as_string().unwrap(), "nest");
+	assert_eq!(nested.next().unwrap().as_string().unwrap(), "arrays");
 
 	let mut tables = toml.get_array("tables").unwrap().iter();
-	let table1 = tables.next().unwrap().table().unwrap();
+	let table1 = tables.next().unwrap().as_table().unwrap();
 	assert_eq!(table1.get_string("name").unwrap(), "bruh");
-	let table2 = tables.next().unwrap().table().unwrap();
+	let table2 = tables.next().unwrap().as_table().unwrap();
 	assert_eq!(
 		table2.get_string("name").unwrap(),
 		"bruh 2 electric boogaloo"
@@ -252,7 +252,7 @@ fn arrays() {
 
 	let single = toml.get_array("single").unwrap();
 	assert_eq!(single.len(), 1);
-	assert_eq!(single.first().unwrap().integer().unwrap(), 2);
+	assert_eq!(single.first().unwrap().as_integer().unwrap(), 2);
 }
 
 /// Test that boml can parse array tables.
@@ -275,15 +275,15 @@ fn array_tables() {
 
 	let entries = toml.get_array("entry").unwrap();
 
-	let first = entries[0].table().unwrap();
+	let first = entries[0].as_table().unwrap();
 	assert_eq!(first.get_integer("idx").unwrap(), 0);
 	assert_eq!(first.get_string("value").unwrap(), "HALLO");
 
-	let second = entries[1].table().unwrap();
+	let second = entries[1].as_table().unwrap();
 	assert_eq!(second.get_integer("idx").unwrap(), 1);
 	assert_eq!(second.get_integer("value").unwrap(), 727);
 
-	let third = entries[2].table().unwrap();
+	let third = entries[2].as_table().unwrap();
 	assert_eq!(third.get_integer("idx").unwrap(), 2);
 	assert!(third.get_boolean("value").unwrap());
 }

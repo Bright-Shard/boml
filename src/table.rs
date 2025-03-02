@@ -1,16 +1,26 @@
-//! Defines the [`Table`] type.
+//! See [`TomlTable`].
 
 use {
-	crate::crate_prelude::*,
-	std::{collections::HashMap, ops::Deref},
+	crate::{
+		text::{CowSpan, Text},
+		types::{TomlValue, TomlValueType},
+		TomlError, TomlErrorKind,
+	},
+	std::{
+		collections::{
+			hash_map::{Entry, VacantEntry},
+			HashMap,
+		},
+		ops::Deref,
+	},
 };
 
 /// A set of key/value pairs in TOML.
 #[derive(Debug, PartialEq, Default)]
-pub struct Table<'a> {
+pub struct TomlTable<'a> {
 	pub(crate) map: HashMap<CowSpan<'a>, TomlValue<'a>>,
 }
-impl<'a> Table<'a> {
+impl<'a> TomlTable<'a> {
 	/// Gets the value for a key, if that value is a table.
 	pub fn get_table(&self, key: &str) -> Result<&Self, TomlGetError<'_, 'a>> {
 		match self.get(key) {
@@ -19,7 +29,7 @@ impl<'a> Table<'a> {
 				if let TomlValue::Table(table) = val {
 					Ok(table)
 				} else {
-					Err(TomlGetError::TypeMismatch(val, val.value_type()))
+					Err(TomlGetError::TypeMismatch(val, val.ty()))
 				}
 			}
 		}
@@ -30,10 +40,7 @@ impl<'a> Table<'a> {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => match val {
 				TomlValue::String(string) => Ok(string.as_str()),
-				other_val => Err(TomlGetError::TypeMismatch(
-					other_val,
-					other_val.value_type(),
-				)),
+				other_val => Err(TomlGetError::TypeMismatch(other_val, other_val.ty())),
 			},
 		}
 	}
@@ -45,7 +52,7 @@ impl<'a> Table<'a> {
 				if let TomlValue::Integer(int) = val {
 					Ok(*int)
 				} else {
-					Err(TomlGetError::TypeMismatch(val, val.value_type()))
+					Err(TomlGetError::TypeMismatch(val, val.ty()))
 				}
 			}
 		}
@@ -58,7 +65,7 @@ impl<'a> Table<'a> {
 				if let TomlValue::Float(float) = val {
 					Ok(*float)
 				} else {
-					Err(TomlGetError::TypeMismatch(val, val.value_type()))
+					Err(TomlGetError::TypeMismatch(val, val.ty()))
 				}
 			}
 		}
@@ -71,7 +78,7 @@ impl<'a> Table<'a> {
 				if let TomlValue::Boolean(bool) = val {
 					Ok(*bool)
 				} else {
-					Err(TomlGetError::TypeMismatch(val, val.value_type()))
+					Err(TomlGetError::TypeMismatch(val, val.ty()))
 				}
 			}
 		}
@@ -81,77 +88,32 @@ impl<'a> Table<'a> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {
-				if let TomlValue::Array(array) = val {
+				if let TomlValue::Array(array, _) = val {
 					Ok(array)
 				} else {
-					Err(TomlGetError::TypeMismatch(val, val.value_type()))
+					Err(TomlGetError::TypeMismatch(val, val.ty()))
 				}
 			}
 		}
 	}
 
-	/// Inserts a value into the table, handling dotted keys automatically. Returns true if
-	/// inserting the value overwrote another value.
-	pub(crate) fn insert(&mut self, key: Key<'a>, value: TomlValue<'a>) -> bool {
-		if let Some(child) = key.child {
-			let possible_table = self
-				.map
-				.entry(key.text)
-				.or_insert(TomlValue::Table(Table::default()));
+	pub(crate) fn value_entry<'b>(
+		&'b mut self,
+		text: &mut Text<'a>,
+	) -> Result<VacantEntry<'b, CowSpan<'a>, TomlValue<'a>>, TomlError<'a>> {
+		let start = text.idx();
+		let (table, key) = crate::parser::key::parse_nested(text, self)?;
 
-			let table = match possible_table {
-				TomlValue::Array(array) => {
-					let Some(TomlValue::Table(table)) = array.last_mut() else {
-						return true;
-					};
-					table
-				}
-				TomlValue::Table(table) => table,
-				_ => return true,
-			};
-
-			table.insert(*child, value)
-		} else {
-			self.map.insert(key.text, value).is_some()
+		match table.map.entry(key) {
+			Entry::Occupied(_) => Err(TomlError {
+				src: text.excerpt_to_idx(start..),
+				kind: TomlErrorKind::ReusedKey,
+			}),
+			Entry::Vacant(vacant) => Ok(vacant),
 		}
-	}
-	/// Gets a value from the table, or inserts one if it doesn't exist. This handles dotted keys automatically,
-	/// but will return `None` if the key is invalid (ie indexes into something that isn't a table).
-	pub(crate) fn get_or_insert_mut(
-		&mut self,
-		key: Key<'a>,
-		value: TomlValue<'a>,
-	) -> Option<&mut TomlValue<'a>> {
-		if let Some(child) = key.child {
-			let possible_table = self
-				.map
-				.entry(key.text)
-				.or_insert(TomlValue::Table(Table::default()));
-
-			let table = match possible_table {
-				TomlValue::Array(array) => {
-					let Some(TomlValue::Table(table)) = array.last_mut() else {
-						return None;
-					};
-					table
-				}
-				TomlValue::Table(table) => table,
-				_ => return None,
-			};
-
-			table.get_or_insert_mut(*child, value)
-		} else {
-			Some(self.map.entry(key.text).or_insert(value))
-		}
-	}
-
-	/// Iterates over the (key, value) pairs in this table. This replaces the [`HashMap`]'s normal iter method,
-	/// so that the keys are normal `&str`s instead of boml's internal [`CowSpan`] string type.
-	pub fn iter(&self) -> impl Iterator<Item = (&str, &TomlValue<'_>)> {
-		self.map.iter().map(|(k, v)| (k.as_str(), v))
 	}
 }
-impl<'a> Deref for Table<'a> {
+impl<'a> Deref for TomlTable<'a> {
 	type Target = HashMap<CowSpan<'a>, TomlValue<'a>>;
 
 	fn deref(&self) -> &Self::Target {
@@ -159,7 +121,7 @@ impl<'a> Deref for Table<'a> {
 	}
 }
 
-/// Errors for the `get_<type>` methods in [`Table`].
+/// Errors for the `get_<type>` methods in [`TomlTable`].
 #[derive(Debug, PartialEq)]
 pub enum TomlGetError<'a, 'table> {
 	/// There was no value for the provided key.
@@ -167,4 +129,60 @@ pub enum TomlGetError<'a, 'table> {
 	/// The value for the provided key had a different type. Stores the
 	/// value for that key and its type.
 	TypeMismatch(&'a TomlValue<'table>, TomlValueType),
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	struct Tester {
+		key: &'static str,
+		value: TomlValue<'static>,
+	}
+	impl Tester {
+		fn build(self) -> TomlTable<'static> {
+			println!("Running test for key `{}`", self.key);
+
+			let mut table = TomlTable::default();
+			table
+				.value_entry(&mut Text::new(self.key))
+				.unwrap()
+				.insert(self.value);
+			table
+		}
+	}
+
+	#[test]
+	fn test_table_keys() {
+		let basic = Tester {
+			key: "bool",
+			value: TomlValue::Boolean(true),
+		}
+		.build();
+		assert_eq!(basic.get("bool"), Some(&TomlValue::Boolean(true)));
+
+		let dotted = Tester {
+			key: "dot.bool",
+			value: TomlValue::Boolean(true),
+		}
+		.build();
+		let Some(TomlValue::Table(subtable)) = dotted.get("dot") else {
+			panic!()
+		};
+		assert_eq!(subtable.get("bool"), Some(&TomlValue::Boolean(true)));
+
+		let quoted = Tester {
+			key: "'wowza.hi'",
+			value: TomlValue::Boolean(true),
+		}
+		.build();
+		assert_eq!(quoted.get("wowza.hi"), Some(&TomlValue::Boolean(true)));
+
+		let quoted_alt = Tester {
+			key: r#""wowza.hi""#,
+			value: TomlValue::Boolean(true),
+		}
+		.build();
+		assert_eq!(quoted_alt.get("wowza.hi"), Some(&TomlValue::Boolean(true)));
+	}
 }

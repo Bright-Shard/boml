@@ -1,192 +1,110 @@
-pub mod parser;
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+
+mod parser;
 pub mod table;
-pub mod text;
+mod text;
 pub mod types;
 
-use {crate_prelude::*, std::ops::Deref};
+use {
+	crate::table::TomlTable,
+	std::{
+		fmt::{Debug, Display},
+		ops::Deref,
+	},
+	text::Span,
+};
 
-/// BOML's TOML parser. Create a new one with [`new()`] or [`parse()`], then use
-/// it just like a [`Table`].
-///
-/// [`new()`]: Toml::new()
-/// [`parse()`]: Toml::parse()
+/// Attempts to parse the given TOML.
+pub fn parse(str: &str) -> Result<Toml<'_>, TomlError> {
+	parser::parse_str(str)
+}
+
+/// A parsed TOML file.
 #[derive(Debug)]
 pub struct Toml<'a> {
-	table: Table<'a>,
+	source: &'a str,
+	table: TomlTable<'a>,
 }
 impl<'a> Toml<'a> {
-	/// A wrapper around [`Toml::parse()`].
-	#[inline(always)]
-	pub fn new(text: &'a str) -> Result<Self, Error> {
-		Self::parse(text)
+	/// Attempts to parse the given TOML.
+	pub fn new(str: &'a str) -> Result<Self, TomlError<'a>> {
+		parser::parse_str(str)
+	}
+	/// Attempts to parse the given TOML.
+	pub fn parse(str: &'a str) -> Result<Self, TomlError<'a>> {
+		parser::parse_str(str)
 	}
 
-	/// Attempts to parse the provided string as TOML.
-	pub fn parse(text: &'a str) -> Result<Self, Error> {
-		let mut text = Text { text, idx: 0 };
-		text.skip_whitespace_and_newlines();
-		let mut root_table = Table::default();
-		// (table name, table, if it's a member of an array of tables)
-		let mut current_table: Option<(Key<'_>, Table<'_>, bool)> = None;
-
-		while text.idx < text.end() {
-			match text.current_byte().unwrap() {
-				// Comment
-				b'#' => {
-					if let Some(newline_idx) = text.excerpt(text.idx..).find(b'\n') {
-						text.idx = newline_idx;
-					} else {
-						// Comment is at end of file
-						break;
-					}
-				}
-				// Table definition
-				b'[' => {
-					if let Some((key, table, array)) = current_table.take() {
-						insert_subtable(&mut root_table, key, table, array)?;
-					}
-
-					if text.byte(text.idx + 1) == Some(b'[') {
-						text.idx += 2;
-						text.skip_whitespace();
-						let table_name = parser::parse_key(&mut text)?;
-						text.idx += 1;
-						text.skip_whitespace();
-
-						if text.current_byte() != Some(b']')
-							|| text.byte(text.idx + 1) != Some(b']')
-						{
-							return Err(Error {
-								start: table_name.text.span().start - 1,
-								end: table_name.text.span().end,
-								kind: ErrorKind::UnclosedBracket,
-							});
-						}
-						text.idx += 2;
-
-						current_table = Some((table_name, Table::default(), true));
-					} else {
-						text.idx += 1;
-						text.skip_whitespace();
-						let table_name = parser::parse_key(&mut text)?;
-						text.idx += 1;
-						text.skip_whitespace();
-
-						if text.current_byte() != Some(b']') {
-							return Err(Error {
-								start: table_name.text.span().start - 1,
-								end: table_name.text.span().end,
-								kind: ErrorKind::UnclosedBracket,
-							});
-						}
-						text.idx += 1;
-
-						current_table = Some((table_name, Table::default(), false));
-					}
-				}
-				// Key definition
-				_ => {
-					let (key, value) = parser::parse_assignment(&mut text)?;
-
-					let table = if let Some((_, ref mut table, _)) = current_table {
-						table
-					} else {
-						&mut root_table
-					};
-
-					table.insert(key, value);
-
-					text.idx += 1;
-				}
-			}
-
-			text.skip_whitespace_and_newlines();
-		}
-
-		if let Some((key, table, array)) = current_table.take() {
-			insert_subtable(&mut root_table, key, table, array)?;
-		}
-
-		Ok(Self { table: root_table })
+	/// The source code of this TOML.
+	pub fn source(&self) -> &str {
+		self.source
 	}
-
-	/// Consumes the [`Toml<'_>`], producing a [`Table<'_>`].
-	pub fn into_table(self) -> Table<'a> {
-		self.table
+}
+impl<'a> From<Toml<'a>> for TomlTable<'a> {
+	fn from(value: Toml<'a>) -> TomlTable<'a> {
+		value.table
 	}
 }
 impl<'a> Deref for Toml<'a> {
-	type Target = Table<'a>;
+	type Target = TomlTable<'a>;
 
 	fn deref(&self) -> &Self::Target {
 		&self.table
 	}
 }
 
-fn insert_subtable<'a>(
-	root_table: &mut Table<'a>,
-	key: Key<'a>,
-	table: Table<'a>,
-	array: bool,
-) -> Result<(), Error> {
-	let (start, end) = (key.text.span().start, key.text.span().end);
-
-	if array {
-		let Some(TomlValue::Array(array)) =
-			root_table.get_or_insert_mut(key, TomlValue::Array(Vec::new()))
-		else {
-			return Err(Error {
-				start,
-				end,
-				kind: ErrorKind::ReusedKey,
-			});
-		};
-		array.push(TomlValue::Table(table));
-	} else {
-		let Some(TomlValue::Table(to_insert)) =
-			root_table.get_or_insert_mut(key, TomlValue::Table(Table::default()))
-		else {
-			return Err(Error {
-				start,
-				end,
-				kind: ErrorKind::ReusedKey,
-			});
-		};
-
-		for (key, value) in table.map {
-			let (start, end) = (key.span().start, key.span().end);
-			let old = to_insert.map.insert(key, value);
-
-			if old.is_some() {
-				return Err(Error {
-					start,
-					end,
-					kind: ErrorKind::ReusedKey,
-				});
+/// An error while parsing TOML.
+pub struct TomlError<'a> {
+	/// An excerpt of the region of text that caused the error.
+	pub src: Span<'a>,
+	/// The type of parsing error; see [`TomlErrorKind`].
+	pub kind: TomlErrorKind,
+}
+impl Debug for TomlError<'_> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let mut start = self.src.source[..self.src.start].bytes().enumerate().rev();
+		let mut newlines = 3u8;
+		while newlines != 0 {
+			match start.next() {
+				None => break,
+				Some((_, b'\n')) => newlines -= 1,
+				_ => {}
 			}
 		}
+		let start = start.next().map(|(idx, _)| idx + 2).unwrap_or(0);
+
+		let mut end = self.src.source[self.src.end..].bytes().enumerate();
+		let mut newlines = 3u8;
+		while newlines != 0 {
+			match end.next() {
+				None => break,
+				Some((_, b'\n')) => newlines -= 1,
+				_ => {}
+			}
+		}
+		let end = end
+			.next()
+			.map(|(idx, _)| self.src.end + idx - 1)
+			.unwrap_or(self.src.source.len());
+
+		write!(
+			f,
+			"Error: {:?} at `{}`\nIn:\n{}",
+			self.kind,
+			self.src.as_str(),
+			&self.src.source[start..end]
+		)
 	}
-
-	Ok(())
 }
-
-/// An error while parsing TOML, and the range of text that caused
-/// that error.
-#[derive(Debug)]
-pub struct Error {
-	/// The first byte (inclusive) of the text that caused a parsing
-	/// error.
-	pub start: usize,
-	/// The last byte (inclusive) of the text that caused a parsing
-	/// error.
-	pub end: usize,
-	/// The type of parsing error; see the [`ErrorKind`] docs.
-	pub kind: ErrorKind,
+impl Display for TomlError<'_> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{self:?}")
+	}
 }
-
 /// A type of error while parsing TOML.
 #[derive(Debug, PartialEq, Eq)]
-pub enum ErrorKind {
+pub enum TomlErrorKind {
 	/// A bare key (key without quotes) contains an invalid character.
 	InvalidBareKey,
 	/// There was a space in the middle of a bare key.
@@ -197,43 +115,66 @@ pub enum ErrorKind {
 	NoKeyInAssignment,
 	/// There was no value in a key/value assignment.
 	NoValueInAssignment,
-	/// A string literal or quoted key didn't have a closing quote.
-	UnclosedString,
+	/// A basic string (`"hello"`) didn't have a closing quote.
+	UnclosedBasicString,
+	/// A literal string (`'hello'`) didn't have a closing quote.
+	UnclosedLiteralString,
+	/// A quoted key didn't have a closing quote.
+	UnclosedQuotedKey,
 	/// The value in a key/value assignment wasn't recognised.
 	UnrecognisedValue,
 	/// The same key was used twice.
 	ReusedKey,
-	/// A number was too big to fit in an i64. This will also be thrown
-	/// for numbers that are "too little", ie, are too negative to fit.
+	/// A number was too big to fit in an i64. This will be thrown for both
+	/// positive and negative numbers.
 	NumberTooLarge,
-	/// A number has an invalid base or a leading zero. This error will be thrown
-	/// for floats or times with bases, since they cannot have bases.
-	NumberHasInvalidBaseOrLeadingZero,
+	/// An integer has an invalid base. Valid bases are hex (0x), octal (0o),
+	/// and binary (0b).
+	NumberHasInvalidBase,
+	/// A literal number starts with a 0.
+	NumberHasLeadingZero,
 	/// A number is malformed/not parseable.
 	InvalidNumber,
 	/// A basic string has an unknown escape sequence.
 	UnknownEscapeSequence,
 	/// A unicode escape in a basic string has an unknown unicode scalar value.
 	UnknownUnicodeScalar,
-	/// A table, inline table, or array didn't have a closing bracket.
-	UnclosedBracket,
+	/// A table (`[table]`) had an unclosed bracket.
+	UnclosedTableBracket,
+	/// An inline table (`{key = "val", one = 2}`) had an unclosed bracket.
+	UnclosedInlineTableBracket,
+	/// An array of tables (`[[array_table]]`) was missing closing brackets.
+	UnclosedArrayOfTablesBracket,
+	/// An array literal (`[true, "hi", 123]`) was missing a closing bracket.
+	UnclosedArrayBracket,
 	/// There was no `,` in between values in an inline table or array.
 	NoCommaDelimeter,
+	/// One section (year, month, day, hour, etc) of a date/time value had too
+	/// many digits.
+	DateTimeTooManyDigits,
+	/// A date value was missing its month.
+	DateMissingMonth,
+	/// A date value was missing its day.
+	DateMissingDay,
+	/// A date value was missing the `-` between a year/month/day.
+	DateMissingDash,
+	/// A time value was missing its minute.
+	TimeMissingMinute,
+	/// A time value was missing its second.
+	TimeMissingSecond,
+	/// A time value was missing the `:` between its hour/minute/second.
+	TimeMissingColon,
+	/// The offset portion of an offset datetime was missing its hour.
+	OffsetMissingHour,
+	/// The offset portion of an offset datetime was missing its minute.
+	OffsetMissingMinute,
 }
 
-mod crate_prelude {
-	pub use super::{
-		table::Table,
-		text::{CowSpan, Span, Text},
-		types::{Key, TomlValue, TomlValueType},
-		Error, ErrorKind,
-	};
-}
-
+/// Types that may be useful to have imported while using BOML.
 pub mod prelude {
 	pub use crate::{
-		table::{Table as TomlTable, TomlGetError},
+		table::{TomlGetError, TomlTable},
 		types::{TomlValue, TomlValueType},
-		Error as TomlError, ErrorKind as TomlErrorKind, Toml,
+		Toml, TomlError, TomlErrorKind,
 	};
 }
