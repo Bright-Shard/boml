@@ -7,18 +7,17 @@ mod text;
 pub mod types;
 
 use {
-	crate::table::TomlTable,
-	std::{
+	crate::table::TomlTable, std::{
 		fmt::{Debug, Display},
 		ops::Deref,
-	},
-	text::Span,
+	}, table::TomlGetError, text::Span, types::{TomlValue, TomlValueType}
 };
 
 /// Attempts to parse the given TOML.
 pub fn parse(str: &str) -> Result<Toml<'_>, TomlError> {
 	parser::parse_str(str)
 }
+
 
 /// A parsed TOML file.
 #[derive(Debug)]
@@ -115,13 +114,13 @@ pub enum TomlErrorKind {
 	NoKeyInAssignment,
 	/// There was no value in a key/value assignment.
 	NoValueInAssignment,
-	/// A basic string (`"hello"`) didn't have a closing quote.
+	/// A basic string (`"hello"`) didn'a have a closing quote.
 	UnclosedBasicString,
-	/// A literal string (`'hello'`) didn't have a closing quote.
+	/// A literal string (`'hello'`) didn'a have a closing quote.
 	UnclosedLiteralString,
-	/// A quoted key didn't have a closing quote.
+	/// A quoted key didn'a have a closing quote.
 	UnclosedQuotedKey,
-	/// The value in a key/value assignment wasn't recognised.
+	/// The value in a key/value assignment wasn'a recognised.
 	UnrecognisedValue,
 	/// The same key was used twice.
 	ReusedKey,
@@ -177,4 +176,96 @@ pub mod prelude {
 		types::{TomlValue, TomlValueType},
 		Toml, TomlError, TomlErrorKind,
 	};
+}
+///
+pub trait FromToml<'a>: Sized {
+	///
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, TomlGetError<'a, 'a>>;
+}
+
+impl<'a> FromToml<'a> for bool {
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, TomlGetError<'a, 'a>> {
+		match value {
+			Some(TomlValue::Boolean(b)) => Ok(*b),
+			Some(v) => Err(TomlGetError::TypeMismatch(v, TomlValueType::Boolean)),
+			None => Err(TomlGetError::InvalidKey),
+		}
+	}
+}
+
+impl<'a> FromToml<'a> for i64 {
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, TomlGetError<'a, 'a>> {
+		match value {
+			Some(TomlValue::Integer(i)) => Ok(*i),
+			Some(v) => Err(TomlGetError::TypeMismatch(v, TomlValueType::Integer)),
+			None => Err(TomlGetError::InvalidKey),
+		}
+	}
+}
+
+impl<'a> FromToml<'a> for f64 {
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, TomlGetError<'a, 'a>> {
+		match value {
+			Some(TomlValue::Float(f)) => Ok(*f),
+			Some(v) => Err(TomlGetError::TypeMismatch(v, TomlValueType::Float)),
+			None => Err(TomlGetError::InvalidKey),
+		}
+	}
+}
+
+impl<'a> FromToml<'a> for String {
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, TomlGetError<'a, 'a>> {
+		match value {
+			Some(TomlValue::String(s)) => Ok(s.to_string()),
+			Some(v) => Err(TomlGetError::TypeMismatch(v, TomlValueType::String)),
+			None => Err(TomlGetError::InvalidKey),
+		}
+	}
+}
+
+impl<'a> FromToml<'a> for &'a str {
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, TomlGetError<'a, 'a>> {
+		match value {
+			Some(TomlValue::String(s)) => Ok(s.as_str()),
+			Some(v) => Err(TomlGetError::TypeMismatch(v, TomlValueType::String)),
+			None => Err(TomlGetError::InvalidKey),
+		}
+	}
+}
+
+impl<'a, T> FromToml<'a> for Vec<T>
+where
+	T: FromToml<'a>,
+{
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, TomlGetError<'a, 'a>> {
+		match value {
+			Some(TomlValue::Array(arr, _)) => arr.iter().map(|v| T::from_toml(Some(v))).collect(),
+			Some(v) => Err(TomlGetError::TypeMismatch(v, TomlValueType::Array)),
+			None => Err(TomlGetError::InvalidKey),
+		}
+	}
+}
+
+impl<'a, T> FromToml<'a> for Option<T>
+where
+	T: FromToml<'a>,
+{
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, TomlGetError<'a, 'a>> {
+		match value {			
+			Some(v) => Ok(Some(T::from_toml(Some(v))?)),
+			None => Ok(None),
+		}
+	}
+}
+
+///
+pub trait TomlTryInto<'a, T>: Sized {
+	///
+	fn toml_try_into(self) -> Result<T, TomlGetError<'a, 'a>>;
+}
+impl <'a, T> TomlTryInto<'a, T> for Option<&'a TomlValue<'a>>
+where T: FromToml<'a> {
+	fn toml_try_into(self) -> Result<T, TomlGetError<'a, 'a>> {
+		T::from_toml(self)
+	}
 }

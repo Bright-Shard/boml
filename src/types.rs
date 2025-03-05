@@ -179,7 +179,7 @@ impl<'a> TomlValue<'a> {
 			}
 			_ => None,
 		}
-	}
+	}	
 }
 
 /// The basic value types in TOML. See [`TomlValue`] for descriptions of each
