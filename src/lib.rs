@@ -10,16 +10,18 @@ pub mod types;
 mod convert_traits;
 
 use {
-	crate::table::TomlTable, std::{
-		collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::Deref
-	}, table::TomlGetError, text::Span, types::{TomlValue, TomlValueType}
+	crate::table::TomlTable,
+	std::{
+		fmt::{Debug, Display},
+		ops::Deref,
+	},
+	text::Span,
 };
 
 /// Attempts to parse the given TOML.
 pub fn parse(str: &str) -> Result<Toml<'_>, TomlError> {
 	parser::parse_str(str)
 }
-
 
 /// A parsed TOML file.
 #[derive(Debug)]
@@ -178,10 +180,9 @@ pub mod prelude {
 		types::{TomlValue, TomlValueType},
 		Toml, TomlError, TomlErrorKind,
 	};
-	
-	#[cfg(feature = "derive")]
-	pub use boml_derive::{FromToml, boml};
+
 	#[cfg(feature = "derive")]
 	pub use crate::convert_traits::{FromToml, FromTomlError, TomlTryInto};
+	#[cfg(feature = "derive")]
+	pub use boml_derive::{boml, FromToml};
 }
-
