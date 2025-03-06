@@ -1,7 +1,6 @@
 use boml::prelude::*;
-use boml::{FromToml, TomlTryInto};
+use boml::{FromToml, TomlTryInto, FromTomlError};
 use boml_derive::FromToml;
-use syn::token::Ne;
 
 
 // #[derive(FromToml)]
@@ -17,21 +16,27 @@ use syn::token::Ne;
 // }
 
 #[allow(dead_code)]
-#[derive(FromToml, Debug, Clone)]
-struct Example<'a, T: Clone> {
+#[derive(FromToml, Debug)]
+struct Example<'a> {
     a: i64,
     b: String,
     c: bool,
     d: f64,
-    e: &'a str,
-    f: T   
+    e: &'a str,    
 }
 
 #[allow(dead_code)]
-#[derive(FromToml, Debug, Clone)]
+#[derive(FromToml, Debug)]
 struct Nested<'a> {
     a: i64,
     b: &'a str,
+}
+
+#[allow(dead_code)]
+#[derive(FromToml, Debug)]
+enum Test<'a> {
+    A(i64),
+    B(&'a str, i64),
 }
 
 fn main() {
@@ -47,10 +52,8 @@ fn main() {
         b = "Hello, World!"
     "#).unwrap();
     
-
-    
     let v = TomlValue::Table(toml.into());
-    let example = Example::<Nested<'_>>::from_toml(Some(&v)).unwrap();
-
+    let example = Example::from_toml(Some(&v)).unwrap();
+    
     println!("{:?}", example);
 }
