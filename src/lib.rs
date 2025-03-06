@@ -8,8 +8,7 @@ pub mod types;
 
 use {
 	crate::table::TomlTable, std::{
-		fmt::{Debug, Display},
-		ops::Deref,
+		collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::Deref
 	}, table::TomlGetError, text::Span, types::{TomlValue, TomlValueType}
 };
 
@@ -178,9 +177,9 @@ pub mod prelude {
 	};
 	
 	#[cfg(feature = "derive")]
-	pub use boml_derive::FromToml;
+	pub use boml_derive::{FromToml, boml};
 	#[cfg(feature = "derive")]
-	pub use crate::{TomlTryInto, FromToml};
+	pub use crate::{TomlTryInto, FromToml, FromTomlError};
 }
 /// Error type returned by `FromToml::from_toml`.
 #[derive(Debug)]
@@ -253,6 +252,31 @@ where
 		match value {			
 			Some(v) => Ok(Some(T::from_toml(Some(v))?)),
 			None => Ok(None),
+		}
+	}
+}
+impl<'a, T> FromToml<'a> for HashMap<&'a str, T> 
+where T: FromToml<'a> {
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
+		match value {
+			Some(TomlValue::Table(table)) => table.map.iter()
+				.map(|(k, v)| Ok((k.as_str(), T::from_toml(Some(v))?)))
+				.collect(),
+			Some(v) => Err(FromTomlError::TypeMismatch(v, TomlValueType::Table)),
+			None => Err(FromTomlError::Missing),
+		}
+	}
+}
+
+impl<'a, T> FromToml<'a> for BTreeMap<&'a str, T>
+where T: FromToml<'a> {
+	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
+		match value {
+			Some(TomlValue::Table(table)) => table.map.iter()
+				.map(|(k, v)| Ok((k.as_str(), T::from_toml(Some(v))?)))
+				.collect(),
+			Some(v) => Err(FromTomlError::TypeMismatch(v, TomlValueType::Table)),
+			None => Err(FromTomlError::Missing),
 		}
 	}
 }

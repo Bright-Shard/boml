@@ -27,8 +27,6 @@ json = "0.12"
 ureq = { version = "3.0", default-features = false, features = ["rustls"] }
 chrono = "0.4"
 
-boml-derive = { path = "boml-derive" }
-
 [features]
 default = []
 chrono = ["dep:chrono"]
