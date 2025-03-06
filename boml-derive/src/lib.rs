@@ -1,6 +1,6 @@
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
-use syn::{parse_macro_input, DataEnum, DataStruct, DeriveInput, FieldsNamed, FieldsUnnamed, Generics, Ident, TypeParam, Variant};
+use syn::{parse::{Parse, Parser}, parse_macro_input, spanned::Spanned, Attribute, DataEnum, DataStruct, DeriveInput, FieldsNamed, FieldsUnnamed, Generics, Ident, Token, TypeParam, Variant};
 
 #[proc_macro_derive(FromToml)]
 pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -8,12 +8,14 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 		ident,
 		generics,
 		data,
+		attrs,
 		..
 	} = parse_macro_input!(input);	
 	
 	match data {
 		syn::Data::Struct(data) => derive_struct(ident, generics, data),
-		syn::Data::Enum(data) => derive_enum(ident, generics, data),
+		syn::Data::Enum(data) => derive_enum(ident, generics, attrs, data)
+			.unwrap_or_else(|e| e.to_compile_error()),
 		syn::Data::Union(_) => unimplemented!(),
 	}.into()
 } 
@@ -125,8 +127,11 @@ fn derive_unit_struct(ident: Ident, generics: Generics) -> TokenStream {
 	}
 }
 
+// -------------------------------------------------------------------------------------------------
+// Enum
+// -------------------------------------------------------------------------------------------------
 
-fn derive_enum(ident: Ident, generics: Generics, data: DataEnum) -> TokenStream {
+fn derive_enum(ident: Ident, generics: Generics, attrs: Vec<Attribute>, data: DataEnum) -> Result<TokenStream, syn::Error> {
 	let variants = data.variants.into_iter().map(|variant| {	
 		let ident = variant.ident.clone();
 		let ctor = enum_variant_ctor(variant);
@@ -138,10 +143,18 @@ fn derive_enum(ident: Ident, generics: Generics, data: DataEnum) -> TokenStream 
 		}
 	});
 
+	let attr_fields: Vec<_> = attrs.into_iter()
+	.filter(|attr| attr.path().is_ident("boml"))
+	.map(|attr| {
+		attr.parse_args().map(|attr: BomlAttr| attr.0)
+	}).collect::<Result<_,_>>()?;
+
+	let attr_fields = attr_fields.into_iter().flatten().collect::<Vec<_>>();
+	
 	let ty_generics = generate_ty_generics(&generics);
 	let impl_generics = generate_impl_generics(&generics);
 	
-	quote! {
+	Ok(quote! {
 		impl #impl_generics FromToml<'__boml_derive_a> for #ident #ty_generics {		
 			fn from_toml(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>) 
 				-> Result<Self, FromTomlError<'__boml_derive_a>> {
@@ -161,7 +174,7 @@ fn derive_enum(ident: Ident, generics: Generics, data: DataEnum) -> TokenStream 
 				};
 			}
 		}
-	}
+	})
 }
 
 fn enum_variant_ctor(variant: Variant) -> TokenStream {
@@ -204,3 +217,58 @@ fn enum_unnamed_variant_ctor(ident: Ident, fields: FieldsUnnamed) -> TokenStream
 		)
 	}
 }
+
+enum EnumMode {
+	ValueEnum,
+	Untagged,
+	TagInternal(String),
+	TagExternal(String, String),
+}
+
+// -------------------------------------------------------------------------------------------------
+// boml attribute
+// -------------------------------------------------------------------------------------------------
+
+#[proc_macro_attribute]
+pub fn boml(_attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+	item
+}
+
+
+struct BomlAttr(Vec<BomlAttrField>);
+
+impl Parse for BomlAttr {
+	fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+		let fields = input.parse_terminated(BomlAttrField::parse, Token![,])?;
+		Ok(BomlAttr(fields.into_iter().collect()))
+	}
+}
+
+enum BomlAttrField {
+	ValueEnum,
+	Untagged,
+	Tag(String),
+	Content(String),
+}
+
+impl Parse for BomlAttrField {
+	fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+		let ident: syn::Ident = input.parse()?;
+		match ident.to_string().as_str() {
+			"value_enum" => Ok(BomlAttrField::ValueEnum),
+			"untagged" => Ok(BomlAttrField::Untagged),
+			"tag" => {
+				input.parse::<syn::Token![=]>()?;
+				let tag: syn::LitStr = input.parse()?;
+				Ok(BomlAttrField::Tag(tag.value()))
+			},
+			"content" => {
+				input.parse::<syn::Token![=]>()?;
+				let content: syn::LitStr = input.parse()?;
+				Ok(BomlAttrField::Content(content.value()))
+			},
+			_ => Err(syn::Error::new(ident.span(), "unknown boml attribute")),
+		}
+	}
+}
+

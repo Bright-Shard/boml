@@ -1,6 +1,6 @@
 use boml::prelude::*;
 use boml::{FromToml, TomlTryInto, FromTomlError};
-use boml_derive::FromToml;
+use boml_derive::{FromToml, boml};
 
 
 // #[derive(FromToml)]
@@ -34,6 +34,7 @@ struct Nested<'a> {
 
 #[allow(dead_code)]
 #[derive(FromToml, Debug)]
+#[boml(untagged)]
 enum Test<'a> {
     A(i64),
     B(&'a str, i64),
