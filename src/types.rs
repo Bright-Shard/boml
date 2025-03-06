@@ -179,7 +179,47 @@ impl<'a> TomlValue<'a> {
 			}
 			_ => None,
 		}
-	}	
+	}
+}
+
+impl<'a> TryFrom<&'a TomlValue<'a>> for bool {
+	type Error = ();
+
+	fn try_from(value: &'a TomlValue<'a>) -> Result<Self, Self::Error> {
+		value.as_bool().ok_or(())
+	}
+}
+
+impl<'a> TryFrom<&'a TomlValue<'a>> for i64 {
+	type Error = ();
+
+	fn try_from(value: &'a TomlValue<'a>) -> Result<Self, Self::Error> {
+		value.as_integer().ok_or(())
+	}
+}
+
+impl<'a> TryFrom<&'a TomlValue<'a>> for f64 {
+	type Error = ();
+
+	fn try_from(value: &'a TomlValue<'a>) -> Result<Self, Self::Error> {
+		value.as_float().ok_or(())
+	}
+}
+
+impl<'a> TryFrom<&'a TomlValue<'a>> for String {
+	type Error = ();
+
+	fn try_from(value: &'a TomlValue<'a>) -> Result<Self, Self::Error> {
+		value.as_string().map(|v| v.to_owned()).ok_or(())
+	}
+}
+
+impl<'a> TryFrom<&'a TomlValue<'a>> for &'a str {
+	type Error = ();
+
+	fn try_from(value: &'a TomlValue<'a>) -> Result<Self, Self::Error> {
+		value.as_string().ok_or(())
+	}
 }
 
 /// The basic value types in TOML. See [`TomlValue`] for descriptions of each

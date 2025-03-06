@@ -17,7 +17,7 @@ use {
 
 /// A set of key/value pairs in TOML.
 #[derive(Debug, PartialEq, Default)]
-pub struct TomlTable<'a> {
+pub struct TomlTable<'a> {	
 	pub(crate) map: HashMap<CowSpan<'a>, TomlValue<'a>>,
 }
 impl<'a> TomlTable<'a> {
