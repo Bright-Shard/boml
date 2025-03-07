@@ -6,6 +6,9 @@ pub mod table;
 mod text;
 pub mod types;
 
+#[cfg(feature = "derive")]
+mod convert_traits;
+
 use {
 	crate::table::TomlTable,
 	std::{
@@ -177,4 +180,9 @@ pub mod prelude {
 		types::{TomlValue, TomlValueType},
 		Toml, TomlError, TomlErrorKind,
 	};
+
+	#[cfg(feature = "derive")]
+	pub use crate::convert_traits::{FromTomlValue, FromTomlError, TomlTryInto, FromToml};
+	#[cfg(feature = "derive")]
+	pub use boml_derive::{boml, FromToml};
 }

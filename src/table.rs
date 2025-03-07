@@ -22,7 +22,7 @@ pub struct TomlTable<'a> {
 }
 impl<'a> TomlTable<'a> {
 	/// Gets the value for a key, if that value is a table.
-	pub fn get_table(&self, key: &str) -> Result<&Self, TomlGetError<'_, 'a>> {
+	pub fn get_table(&'a self, key: &str) -> Result<&'a Self, TomlGetError<'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {
@@ -35,7 +35,7 @@ impl<'a> TomlTable<'a> {
 		}
 	}
 	/// Gets the value for a key, if that value is a string.
-	pub fn get_string(&self, key: &str) -> Result<&str, TomlGetError<'_, 'a>> {
+	pub fn get_string(&'a self, key: &str) -> Result<&'a str, TomlGetError<'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => match val {
@@ -45,7 +45,7 @@ impl<'a> TomlTable<'a> {
 		}
 	}
 	/// Gets the value for a key, if that value is an integer.
-	pub fn get_integer(&self, key: &str) -> Result<i64, TomlGetError<'_, 'a>> {
+	pub fn get_integer(&'a self, key: &str) -> Result<i64, TomlGetError<'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {
@@ -58,7 +58,7 @@ impl<'a> TomlTable<'a> {
 		}
 	}
 	/// Gets the value for a key, if that value is a float.
-	pub fn get_float(&self, key: &str) -> Result<f64, TomlGetError<'_, 'a>> {
+	pub fn get_float(&'a self, key: &str) -> Result<f64, TomlGetError<'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {
@@ -71,7 +71,7 @@ impl<'a> TomlTable<'a> {
 		}
 	}
 	/// Gets the value for a key, if that value is a boolean.
-	pub fn get_boolean(&self, key: &str) -> Result<bool, TomlGetError<'_, 'a>> {
+	pub fn get_boolean(&'a self, key: &str) -> Result<bool, TomlGetError<'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {
@@ -84,7 +84,7 @@ impl<'a> TomlTable<'a> {
 		}
 	}
 	/// Gets the value for a key, if that value is an array.
-	pub fn get_array(&self, key: &str) -> Result<&Vec<TomlValue<'a>>, TomlGetError<'_, 'a>> {
+	pub fn get_array(&'a self, key: &str) -> Result<&'a Vec<TomlValue<'a>>, TomlGetError<'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {
@@ -123,12 +123,12 @@ impl<'a> Deref for TomlTable<'a> {
 
 /// Errors for the `get_<type>` methods in [`TomlTable`].
 #[derive(Debug, PartialEq)]
-pub enum TomlGetError<'a, 'table> {
+pub enum TomlGetError<'a> {
 	/// There was no value for the provided key.
 	InvalidKey,
 	/// The value for the provided key had a different type. Stores the
 	/// value for that key and its type.
-	TypeMismatch(&'a TomlValue<'table>, TomlValueType),
+	TypeMismatch(&'a TomlValue<'a>, TomlValueType),
 }
 
 #[cfg(test)]
