@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-	table::TomlGetError,
-	types::{TomlValue, TomlValueType},
+	table::{TomlGetError, TomlTable},
+	types::{TomlValue, TomlValueType}, Toml,
 };
 
 /// Error type returned by `FromToml::from_toml`.
@@ -38,16 +38,26 @@ impl<'a> From<TomlGetError<'a>> for FromTomlError<'a> {
 /// A trait for types that can be constructed from a TOML value. Used by the derive macro.
 ///
 /// This trait is implemented for all types that implement `TryFrom<&'a TomlValue<'a>, Error = ()>`.
+pub trait FromTomlValue<'a>: Sized {
+	/// Constructs a datatype from a `TomlValue`.
+	fn from_toml_value(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>>;
+}
+///
 pub trait FromToml<'a>: Sized {
-	/// Constructs a value from a TOML value.
-	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>>;
+	/// Constructs a datatype from a TomlTable.
+	fn from_toml_table(value: &'a TomlTable<'a>) -> Result<Self, FromTomlError<'a>>;
+
+	/// Constructs a datatype from a parsed Toml file.
+	fn from_toml(toml: &'a Toml<'a>) -> Result<Self, FromTomlError<'a>> {
+		Self::from_toml_table(&toml.table)
+	}
 }
 
-impl<'a, T> FromToml<'a> for T
+impl<'a, T> FromTomlValue<'a> for T
 where
 	T: TryFrom<&'a TomlValue<'a>, Error = ()>,
 {
-	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
+	fn from_toml_value(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
 		match value {
 			Some(v) => T::try_from(v).map_err(|_| FromTomlError::TypeMismatch(v, v.ty())),
 			None => Err(FromTomlError::Missing),
@@ -55,40 +65,40 @@ where
 	}
 }
 
-impl<'a, T> FromToml<'a> for Vec<T>
+impl<'a, T> FromTomlValue<'a> for Vec<T>
 where
-	T: FromToml<'a>,
+	T: FromTomlValue<'a>,
 {
-	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
+	fn from_toml_value(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
 		match value {
-			Some(TomlValue::Array(arr, _)) => arr.iter().map(|v| T::from_toml(Some(v))).collect(),
+			Some(TomlValue::Array(arr, _)) => arr.iter().map(|v| T::from_toml_value(Some(v))).collect(),
 			Some(v) => Err(FromTomlError::TypeMismatch(v, TomlValueType::Array)),
 			None => Err(FromTomlError::Missing),
 		}
 	}
 }
 
-impl<'a, T> FromToml<'a> for Option<T>
+impl<'a, T> FromTomlValue<'a> for Option<T>
 where
-	T: FromToml<'a>,
+	T: FromTomlValue<'a>,
 {
-	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
+	fn from_toml_value(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
 		match value {
-			Some(v) => Ok(Some(T::from_toml(Some(v))?)),
+			Some(v) => Ok(Some(T::from_toml_value(Some(v))?)),
 			None => Ok(None),
 		}
 	}
 }
-impl<'a, T> FromToml<'a> for HashMap<&'a str, T>
+impl<'a, T> FromTomlValue<'a> for HashMap<&'a str, T>
 where
-	T: FromToml<'a>,
+	T: FromTomlValue<'a>,
 {
-	fn from_toml(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
+	fn from_toml_value(value: Option<&'a TomlValue<'a>>) -> Result<Self, FromTomlError<'a>> {
 		match value {
 			Some(TomlValue::Table(table)) => table
 				.map
 				.iter()
-				.map(|(k, v)| Ok((k.as_str(), T::from_toml(Some(v))?)))
+				.map(|(k, v)| Ok((k.as_str(), T::from_toml_value(Some(v))?)))
 				.collect(),
 			Some(v) => Err(FromTomlError::TypeMismatch(v, TomlValueType::Table)),
 			None => Err(FromTomlError::Missing),
@@ -104,9 +114,9 @@ pub trait TomlTryInto<'a, T>: Sized {
 
 impl<'a, T> TomlTryInto<'a, T> for Option<&'a TomlValue<'a>>
 where
-	T: FromToml<'a>,
+	T: FromTomlValue<'a>,
 {
 	fn toml_try_into(self) -> Result<T, FromTomlError<'a>> {
-		T::from_toml(self)
+		T::from_toml_value(self)
 	}
 }

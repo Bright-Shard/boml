@@ -15,8 +15,7 @@ fn test_derive_struct_named() {
         bar = "hello"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(
@@ -38,8 +37,7 @@ fn test_derive_struct_unnamed() {
         1 = "hello"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test(42, "hello".to_string()), actual.unwrap());
@@ -52,8 +50,7 @@ fn test_derive_struct_unit() {
 
 	let toml = r#""#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test, actual.unwrap());
@@ -74,8 +71,7 @@ fn test_derive_lifetimes() {
         baz = "!"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(
@@ -101,8 +97,7 @@ fn test_derive_generics() {
         bar = "hello world"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(
@@ -113,6 +108,8 @@ fn test_derive_generics() {
 		actual.unwrap()
 	);
 }
+
+
 
 #[test]
 fn test_derive_generics_lifetimes() {
@@ -127,8 +124,7 @@ fn test_derive_generics_lifetimes() {
         bar = "hello world"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(
@@ -161,8 +157,8 @@ fn test_derive_nesting() {
         bar = "hello"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Outer::from_toml(Some(&v));
+	let actual = Outer::from_toml(&toml);
+
 	let expected = Outer {
 		foo: 69,
 		inner: Inner {
@@ -185,9 +181,8 @@ fn test_derive_option() {
 	let toml = r#"
         a = 42
     "#;
-	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let toml = boml::parse(toml).unwrap();	
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test { a: 42, b: None }, actual.unwrap());
@@ -205,9 +200,8 @@ fn test_derive_vec() {
         a = [1, 2, 3]
         b = ["hello", "world"]
     "#;
-	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let toml = boml::parse(toml).unwrap();	
+	let actual = Test::from_toml(&toml);
 
 	let expected = Test {
 		a: vec![1, 2, 3],
@@ -230,8 +224,7 @@ fn test_derive_map() {
         b = { hello = "world", foo = "bar" }
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	let mut a = HashMap::new();
 	a.insert("one", 1);
@@ -262,8 +255,7 @@ fn test_derive_enum() {
         0 = 42
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test::A(42), actual.unwrap());
@@ -274,8 +266,7 @@ fn test_derive_enum() {
         bar = "hello world"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(
@@ -290,8 +281,7 @@ fn test_derive_enum() {
         [C]
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test::C, actual.unwrap());
@@ -312,8 +302,7 @@ fn test_derive_enum_tag_internal() {
         0 = 42
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test::A(42), actual.unwrap());
@@ -324,8 +313,7 @@ fn test_derive_enum_tag_internal() {
         bar = "hello world"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(
@@ -340,8 +328,7 @@ fn test_derive_enum_tag_internal() {
         type = "C"
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test::C, actual.unwrap());
@@ -362,8 +349,7 @@ fn test_derive_enum_tag_adjacent() {
         content = { "0" = 42 }
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test::A(42), actual.unwrap());
@@ -373,8 +359,7 @@ fn test_derive_enum_tag_adjacent() {
         content = { foo = 69, bar = "hello world" }
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(
@@ -390,8 +375,7 @@ fn test_derive_enum_tag_adjacent() {
         content = {}
     "#;
 	let toml = boml::parse(toml).unwrap();
-	let v = TomlValue::Table(toml.into());
-	let actual = Test::from_toml(Some(&v));
+	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
 	assert_eq!(Test::C, actual.unwrap());

@@ -45,7 +45,7 @@ fn generate_ty_generics(generics: &Generics) -> TokenStream {
 fn generate_impl_generics(generics: &Generics) -> TokenStream {
 	let ty_params = generics.type_params().map(|ty_param| {
 		let mut bounds = ty_param.bounds.clone();
-		bounds.push(syn::parse_quote! { FromToml<'__boml_derive_a> });
+		bounds.push(syn::parse_quote! { FromTomlValue<'__boml_derive_a> });
 		TypeParam {
 			bounds,
 			..ty_param.clone()
@@ -73,10 +73,16 @@ fn derive_named_struct(ident: Ident, generics: Generics, fields: FieldsNamed) ->
 
 	quote! {
 		impl #impl_generics FromToml<'__boml_derive_a> for #ident #ty_generics {
-			fn from_toml(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>)
+			fn from_toml_table(table: &'__boml_derive_a TomlTable<'__boml_derive_a>)
+				-> Result<Self, FromTomlError<'__boml_derive_a>> {
+				Ok(#ctor)
+			}
+		}
+		impl #impl_generics FromTomlValue<'__boml_derive_a> for #ident #ty_generics {
+			fn from_toml_value(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>)
 				-> Result<Self, FromTomlError<'__boml_derive_a>> {
 				match value {
-					Some(TomlValue::Table(table)) => Ok(#ctor),
+					Some(TomlValue::Table(table)) => Self::from_toml_table(table),
 					Some(v) => Err(FromTomlError::TypeMismatch(v, TomlValueType::Table)),
 					None => Err(FromTomlError::Missing),
 				}
@@ -92,10 +98,16 @@ fn derive_unnamed_struct(ident: Ident, generics: Generics, fields: FieldsUnnamed
 
 	quote! {
 		impl #impl_generics FromToml<'__boml_derive_a> for #ident #ty_generics {
-			fn from_toml(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>)
+			fn from_toml_table(table: &'__boml_derive_a TomlTable<'__boml_derive_a>)
+				-> Result<Self, FromTomlError<'__boml_derive_a>> {
+				Ok(#ctor)
+			}
+		}
+		impl #impl_generics FromTomlValue<'__boml_derive_a> for #ident #ty_generics {
+			fn from_toml_value(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>)
 				-> Result<Self, FromTomlError<'__boml_derive_a>> {
 				match value {
-					Some(TomlValue::Table(table)) => Ok(#ctor),
+					Some(TomlValue::Table(table)) => Self::from_toml_table(table),
 					Some(v) => Err(FromTomlError::TypeMismatch(v, TomlValueType::Table)),
 					None => Err(FromTomlError::Missing),
 				}
@@ -108,9 +120,19 @@ fn derive_unit_struct(ident: Ident, generics: Generics) -> TokenStream {
 	let impl_generics = generate_impl_generics(&generics);
 	quote! {
 		impl #impl_generics FromToml<'__boml_derive_a> for #ident {
-			fn from_toml(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>)
+			fn from_toml_table(table: &'__boml_derive_a TomlTable<'__boml_derive_a>)
 				-> Result<Self, FromTomlError<'__boml_derive_a>> {
 				Ok(Self)
+			}
+		}
+		impl #impl_generics FromTomlValue<'__boml_derive_a> for #ident {
+			fn from_toml_value(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>)
+				-> Result<Self, FromTomlError<'__boml_derive_a>> {
+				match value {
+					Some(TomlValue::Table(table)) => Self::from_toml_table(table),
+					Some(v) => Err(FromTomlError::TypeMismatch(v, TomlValueType::Table)),
+					None => Err(FromTomlError::Missing),
+				}
 			}
 		}
 	}
@@ -131,9 +153,7 @@ fn derive_enum(
 		let ctor = enum_variant_ctor(variant);
 
 		quote! {
-			stringify!(#ident) => {
-				return Ok(Self::#ctor);
-			}
+			stringify!(#ident) => Ok(Self::#ctor)
 		}
 	});
 
@@ -167,7 +187,7 @@ fn derive_enum(
 
 			match key {
 				#(#variants),*,
-				_ => return Err(FromTomlError::InvalidKey(key)),
+				_ => Err(FromTomlError::InvalidKey(key)),
 			}
 		},
 		EnumStrategy::TagInternal(tag) => quote! {
@@ -176,7 +196,7 @@ fn derive_enum(
 
 			match key {
 				#(#variants),*,
-				_ => return Err(FromTomlError::InvalidKey(key)),
+				_ => Err(FromTomlError::InvalidKey(key)),
 			}
 		},
 		EnumStrategy::TagAdjecent(tag, content) => quote! {
@@ -188,7 +208,7 @@ fn derive_enum(
 
 			match key {
 				#(#variants),*,
-				_ => return Err(FromTomlError::InvalidKey(key)),
+				_ => Err(FromTomlError::InvalidKey(key)),
 			}
 		},
 	};
@@ -198,17 +218,20 @@ fn derive_enum(
 
 	Ok(quote! {
 		impl #impl_generics FromToml<'__boml_derive_a> for #ident #ty_generics {
-			fn from_toml(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>)
-				-> Result<Self, FromTomlError<'__boml_derive_a>> {
-				// externally tagged
-				let table = match value {
-					Some(TomlValue::Table(table)) => {
-						#strategy_quote
-					},
-					Some(v) => return Err(FromTomlError::TypeMismatch(v, TomlValueType::Table)),
-					None => return Err(FromTomlError::Missing),
-				};
+			fn from_toml_table(table: &'__boml_derive_a TomlTable<'__boml_derive_a>)
+				-> Result<Self, FromTomlError<'__boml_derive_a>> {				
+				#strategy_quote
+			}
+		}
 
+		impl #impl_generics FromTomlValue<'__boml_derive_a> for #ident #ty_generics {
+			fn from_toml_value(value: Option<&'__boml_derive_a TomlValue<'__boml_derive_a>>)
+				-> Result<Self, FromTomlError<'__boml_derive_a>> {
+				match value {
+					Some(TomlValue::Table(table)) => Self::from_toml_table(table),
+					Some(v) => Err(FromTomlError::TypeMismatch(v, TomlValueType::Table)),
+					None => Err(FromTomlError::Missing),
+				}
 			}
 		}
 	})

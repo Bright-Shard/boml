@@ -182,7 +182,7 @@ pub mod prelude {
 	};
 
 	#[cfg(feature = "derive")]
-	pub use crate::convert_traits::{FromToml, FromTomlError, TomlTryInto};
+	pub use crate::convert_traits::{FromTomlValue, FromTomlError, TomlTryInto, FromToml};
 	#[cfg(feature = "derive")]
 	pub use boml_derive::{boml, FromToml};
 }
