@@ -45,7 +45,7 @@ pub trait FromTomlValue<'a>: Sized {
 /// A trait for types that can be constructed from a TOML value. Used by the derive macro.
 pub trait FromToml<'a>: Sized {
 	/// Constructs a datatype from a TomlTable.
-	fn from_toml_table(value: &'a TomlTable<'a>) -> Result<Self, FromTomlError<'a>>;
+	fn from_toml_table(table: &'a TomlTable<'a>) -> Result<Self, FromTomlError<'a>>;
 
 	/// Constructs a datatype from a parsed Toml file.
 	fn from_toml(toml: &'a Toml<'a>) -> Result<Self, FromTomlError<'a>> {
