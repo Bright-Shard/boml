@@ -109,8 +109,6 @@ fn test_derive_generics() {
 	);
 }
 
-
-
 #[test]
 fn test_derive_generics_lifetimes() {
 	#[derive(FromToml, Debug, PartialEq)]
@@ -181,7 +179,7 @@ fn test_derive_option() {
 	let toml = r#"
         a = 42
     "#;
-	let toml = boml::parse(toml).unwrap();	
+	let toml = boml::parse(toml).unwrap();
 	let actual = Test::from_toml(&toml);
 
 	assert!(actual.is_ok());
@@ -200,7 +198,7 @@ fn test_derive_vec() {
         a = [1, 2, 3]
         b = ["hello", "world"]
     "#;
-	let toml = boml::parse(toml).unwrap();	
+	let toml = boml::parse(toml).unwrap();
 	let actual = Test::from_toml(&toml);
 
 	let expected = Test {

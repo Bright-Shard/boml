@@ -219,7 +219,7 @@ fn derive_enum(
 	Ok(quote! {
 		impl #impl_generics FromToml<'__boml_derive_a> for #ident #ty_generics {
 			fn from_toml_table(table: &'__boml_derive_a TomlTable<'__boml_derive_a>)
-				-> Result<Self, FromTomlError<'__boml_derive_a>> {				
+				-> Result<Self, FromTomlError<'__boml_derive_a>> {
 				#strategy_quote
 			}
 		}
