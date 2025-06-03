@@ -1,5 +1,7 @@
 //! Runs TOML's official test suite: https://github.com/toml-lang/toml-test
 //!
+//! To run: `cargo t toml_test -- --nocapture`
+//!
 //! Assumes git is installed and works.
 
 use {
