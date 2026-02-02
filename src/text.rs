@@ -203,7 +203,7 @@ impl<'a> Span<'a> {
 
 	#[inline]
 	pub fn try_as_str(&self) -> Option<&'a str> {
-		Some(&self.source.get(self.start..=self.end)?)
+		self.source.get(self.start..=self.end)
 	}
 	/// A string covering just the bytes within this span.
 	#[inline]

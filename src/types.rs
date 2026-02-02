@@ -1,6 +1,28 @@
 //! TOML data types.
 
-use crate::{table::TomlTable, text::CowSpan};
+use {
+	crate::{table::TomlTable, text::CowSpan},
+	std::ops::{Deref, DerefMut},
+};
+
+/// An array of TOML values.
+#[derive(Debug, PartialEq)]
+pub struct TomlArray<'a> {
+	pub(crate) values: Vec<TomlValue<'a>>,
+	pub(crate) is_array_of_tables: bool,
+}
+impl<'a> Deref for TomlArray<'a> {
+	type Target = Vec<TomlValue<'a>>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.values
+	}
+}
+impl<'a> DerefMut for TomlArray<'a> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.values
+	}
+}
 
 /// A value in TOML.
 #[derive(Debug, PartialEq)]
@@ -51,7 +73,7 @@ pub enum TomlValue<'a> {
 	OffsetDateTime(OffsetTomlDateTime),
 	/// An array of TOML values. Note that, unlike Rust arrays, TOML arrays can
 	/// store multiple types (i.e. `["string", 1234, []]` is valid).
-	Array(Vec<Self>, bool),
+	Array(TomlArray<'a>),
 	/// A table of key/value pairs.
 	Table(TomlTable<'a>),
 }
@@ -67,7 +89,7 @@ impl<'a> TomlValue<'a> {
 			Self::Date(_) => TomlValueType::Date,
 			Self::DateTime(_) => TomlValueType::DateTime,
 			Self::OffsetDateTime(_) => TomlValueType::OffsetDateTime,
-			Self::Array(_, _) => TomlValueType::Array,
+			Self::Array(_) => TomlValueType::Array,
 			Self::Table(_) => TomlValueType::Table,
 		}
 	}
@@ -101,9 +123,9 @@ impl<'a> TomlValue<'a> {
 		}
 	}
 	/// Attempt to return the value as an array.
-	pub fn as_array(&self) -> Option<&[Self]> {
+	pub fn as_array(&self) -> Option<&TomlArray<'a>> {
 		match self {
-			Self::Array(array, _) => Some(array),
+			Self::Array(array) => Some(array),
 			_ => None,
 		}
 	}

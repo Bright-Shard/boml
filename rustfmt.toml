@@ -1,1 +1,4 @@
+wrap_comments = true
 hard_tabs = true
+imports_granularity = "One"
+newline_style = "Unix"

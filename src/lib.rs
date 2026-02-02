@@ -16,7 +16,7 @@ use {
 };
 
 /// Attempts to parse the given TOML.
-pub fn parse(str: &str) -> Result<Toml<'_>, TomlError> {
+pub fn parse<'a>(str: &'a str) -> Result<Toml<'a>, TomlError<'a>> {
 	parser::parse_str(str)
 }
 

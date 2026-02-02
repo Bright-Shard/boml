@@ -99,13 +99,11 @@ If you enable the crate feature `chrono`, BOML will provide `From` and `Into` im
 
 # TOML Compliance
 
-BOML passes all valid tests cases of the [official TOML test suite](https://github.com/toml-lang/toml-test) for TOML 1.0.
+BOML passes all valid tests cases of the [official TOML test suite](https://github.com/toml-lang/toml-test) for TOML 1.1.
 
 BOML does parse some invalid test cases without erroring, meaning it may parse something that's technically invalid TOML as valid TOML.
 
 To run BOML against the TOML test suite yourself, see [tests/toml_test.rs](tests/toml_test.rs).
-
-TOML 1.1 is not currently supported, but support for it will be added if it's released.
 
 
 

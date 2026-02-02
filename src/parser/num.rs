@@ -316,8 +316,7 @@ fn parse_float<'a>(
 		remaining[0] = byte;
 		remaining = &mut remaining[1..];
 	}
-	let remaining_len = remaining.len();
-	let len = BUFFER_SIZE - remaining_len;
+	let len = BUFFER_SIZE - remaining.len();
 
 	let slice = unsafe { core::slice::from_raw_parts(stack_buffer.as_ptr() as *const u8, len) };
 	let str = unsafe { std::str::from_utf8_unchecked(slice) };

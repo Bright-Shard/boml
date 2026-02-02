@@ -102,7 +102,7 @@ fn toml_test() {
 		let expected_response = json::parse(&expected_response).unwrap();
 
 		let val = TomlValue::Table(toml.into());
-		if json_equals_toml(&expected_response, &val, &file) {
+		if json_equals_toml(&expected_response, &val, file) {
 			valid_tests_passed += 1;
 		} else {
 			println!("WARNING: JSON != TOML:\n{expected_response}\n//\n{val:#?}");

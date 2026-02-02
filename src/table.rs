@@ -19,6 +19,8 @@ use {
 #[derive(Debug, PartialEq, Default)]
 pub struct TomlTable<'a> {
 	pub(crate) map: HashMap<CowSpan<'a>, TomlValue<'a>>,
+	/// Used internally to track if a TOML table was defined multiple times.
+	pub(crate) defined: bool,
 }
 impl<'a> TomlTable<'a> {
 	/// Gets the value for a key, if that value is a table.
@@ -88,7 +90,7 @@ impl<'a> TomlTable<'a> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {
-				if let TomlValue::Array(array, _) = val {
+				if let TomlValue::Array(array) = val {
 					Ok(array)
 				} else {
 					Err(TomlGetError::TypeMismatch(val, val.ty()))
