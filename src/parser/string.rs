@@ -57,6 +57,10 @@ fn string_escape<'a, const MULTILINE: bool>(
 				text.next();
 				b'\r'
 			}
+			b'e' => {
+				text.next();
+				0x1B
+			}
 			b'"' => {
 				text.next();
 				b'"'
