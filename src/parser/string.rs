@@ -65,6 +65,29 @@ fn string_escape<'a, const MULTILINE: bool>(
 				text.next();
 				b'\\'
 			}
+			b'x' => {
+				if text.remaining_bytes() < 2 {
+					return Err(TomlError {
+						src: text.excerpt_to_idx(start..),
+						kind: TomlErrorKind::UnknownUnicodeScalar,
+					});
+				}
+				text.next();
+
+				let Some(char) = u32::from_str_radix(text.local_excerpt(..2).as_str(), 16)
+					.ok()
+					.and_then(char::from_u32)
+				else {
+					return Err(TomlError {
+						src: text.absolute_excerpt(start..start + 6),
+						kind: TomlErrorKind::UnknownUnicodeScalar,
+					});
+				};
+				text.next_n(2);
+
+				string.extend_from_slice(char.encode_utf8(&mut [0u8; 2]).as_bytes());
+				return Ok(());
+			}
 			b'u' => {
 				if text.remaining_bytes() < 4 {
 					return Err(TomlError {

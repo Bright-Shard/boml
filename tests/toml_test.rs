@@ -41,7 +41,7 @@ fn toml_test() {
 		println!("[WARN] Git failed to pull the test suite - tests may be out of date");
 	}
 
-	let files = fs::read_to_string("./files-toml-1.0.0").unwrap();
+	let files = fs::read_to_string("./files-toml-1.1.0").unwrap();
 	let mut lines = files.lines().peekable();
 
 	// Statistics
@@ -122,6 +122,10 @@ fn toml_test() {
 		Tests that failed to read (probably due to invalid encoding): {tests_failed_to_read}
 		"
 	);
+
+	if valid_tests_failed > 0 {
+		panic!();
+	}
 }
 
 fn json_equals_toml(json: &JsonValue, toml: &TomlValue) -> bool {
