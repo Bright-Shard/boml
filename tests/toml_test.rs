@@ -154,14 +154,14 @@ fn toml_test_speed() {
 /// Ensure the `toml-test` test suite is downloaded, then set our current
 /// directory to that folder so we can run its tests.
 fn enter_toml_test_folder() {
-	let toml_test_folder = env::current_dir().unwrap().join("toml-test");
+	let toml_test_folder = env::current_dir().unwrap().join("toml-test").join("tests");
 	if !toml_test_folder.exists() {
 		panic!(
 			"You need to update the `toml-test` git submodule so boml's tests can access it. You can do this with:\n\tgit submodule update --init\n\nAfter running that command, you'll see a new `toml-test` directory, which has TOML's official test suite. You can then rerun boml's tests and boml will run the official test suite."
 		)
 	}
 
-	env::set_current_dir(toml_test_folder.join("tests")).unwrap();
+	env::set_current_dir(toml_test_folder).unwrap();
 }
 
 /// The TOML test suite works by having a TOML file and then the same data
