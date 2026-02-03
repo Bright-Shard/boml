@@ -1,14 +1,14 @@
 [package]
 name = "boml"
 version = "2.0.0"
-edition = "2021"
+edition = "2024"
 authors = ["BrightShard <brightshard@brightshard.dev>"]
 description = "A dead-simple, efficient, dependency-free TOML parser for Rust."
 repository = "https://github.com/bright-shard/boml"
 documentation = "https://docs.rs/boml"
 license = "MIT OR Apache-2.0"
 keywords = ["toml", "parser"]
-rust-version = "1.78.0"
+rust-version = "1.85.0"
 
 [dependencies.chrono]
 version = "0.4"
