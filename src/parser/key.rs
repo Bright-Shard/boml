@@ -2,10 +2,10 @@
 
 use {
 	crate::{
+		TomlError, TomlErrorKind,
 		table::TomlTable,
 		text::{CowSpan, Text},
 		types::TomlValue,
-		TomlError, TomlErrorKind,
 	},
 	std::{collections::hash_map::Entry, hint::unreachable_unchecked},
 };

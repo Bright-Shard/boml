@@ -12,7 +12,7 @@ pub struct TomlArray<'a> {
 	pub(crate) is_array_of_tables: bool,
 }
 impl<'a> Deref for TomlArray<'a> {
-	type Target = Vec<TomlValue<'a>>;
+	type Target = [TomlValue<'a>];
 
 	fn deref(&self) -> &Self::Target {
 		&self.values

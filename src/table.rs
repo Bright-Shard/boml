@@ -2,14 +2,14 @@
 
 use {
 	crate::{
-		text::{CowSpan, Text},
-		types::{TomlValue, TomlValueType},
 		TomlError, TomlErrorKind,
+		text::{CowSpan, Text},
+		types::{TomlArray, TomlValue, TomlValueType},
 	},
 	std::{
 		collections::{
-			hash_map::{Entry, VacantEntry},
 			HashMap,
+			hash_map::{Entry, VacantEntry},
 		},
 		ops::Deref,
 	},
@@ -86,7 +86,7 @@ impl<'a> TomlTable<'a> {
 		}
 	}
 	/// Gets the value for a key, if that value is an array.
-	pub fn get_array(&self, key: &str) -> Result<&Vec<TomlValue<'a>>, TomlGetError<'_, 'a>> {
+	pub fn get_array(&self, key: &str) -> Result<&TomlArray<'a>, TomlGetError<'_, 'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {

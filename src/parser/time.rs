@@ -1,7 +1,7 @@
 use crate::{
+	TomlError, TomlErrorKind,
 	text::Text,
 	types::{OffsetTomlDateTime, TomlDate, TomlDateTime, TomlOffset, TomlTime, TomlValue},
-	TomlError, TomlErrorKind,
 };
 
 fn parse_two_digits(text: &mut Text) -> Option<u8> {

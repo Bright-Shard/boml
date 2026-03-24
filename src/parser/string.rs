@@ -2,8 +2,8 @@
 //! automatically.
 
 use crate::{
-	text::{CowSpan, Span, Text},
 	TomlError, TomlErrorKind,
+	text::{CowSpan, Span, Text},
 };
 
 pub fn parse_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, TomlError<'a>> {
@@ -146,14 +146,14 @@ fn string_escape<'a, const MULTILINE: bool>(
 				return Err(TomlError {
 					src: text.excerpt_to_idx(start..),
 					kind: TomlErrorKind::UnknownEscapeSequence,
-				})
+				});
 			}
 		}),
 		None => {
 			return Err(TomlError {
 				src: text.excerpt_before_idx(start..),
 				kind: TomlErrorKind::UnknownEscapeSequence,
-			})
+			});
 		}
 	}
 

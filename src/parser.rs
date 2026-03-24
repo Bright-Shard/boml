@@ -1,10 +1,10 @@
 use std::{collections::hash_map::Entry, hint::unreachable_unchecked};
 
 use crate::{
+	Toml, TomlError, TomlErrorKind,
 	table::TomlTable,
 	text::Text,
 	types::{TomlArray, TomlValue, TomlValueType},
-	Toml, TomlError, TomlErrorKind,
 };
 
 pub mod inline_table;
@@ -68,7 +68,7 @@ pub fn parse<'a>(
 							return Err(TomlError {
 								src: text.excerpt_before_idx(start..),
 								kind: TomlErrorKind::ReusedKey,
-							})
+							});
 						}
 					}
 					let TomlValue::Array(array) = entry.or_insert(TomlValue::Array(TomlArray {
@@ -80,7 +80,7 @@ pub fn parse<'a>(
 
 					let mut table = TomlTable::default();
 					parse(text, &mut table, false)?;
-					array.push(TomlValue::Table(table));
+					array.values.push(TomlValue::Table(table));
 				} else {
 					text.next();
 					text.skip_whitespace();
@@ -100,7 +100,7 @@ pub fn parse<'a>(
 							return Err(TomlError {
 								src: text.excerpt_to_idx(start..),
 								kind: TomlErrorKind::ReusedKey,
-							})
+							});
 						}
 					};
 					let TomlValue::Table(table) = table else {
