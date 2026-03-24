@@ -2,14 +2,14 @@
 
 use {
 	crate::{
-		text::{CowSpan, Text},
-		types::{TomlValue, TomlValueType},
 		TomlError, TomlErrorKind,
+		text::{CowSpan, Text},
+		types::{TomlArray, TomlValue, TomlValueType},
 	},
 	std::{
 		collections::{
-			hash_map::{Entry, VacantEntry},
 			HashMap,
+			hash_map::{Entry, VacantEntry},
 		},
 		ops::Deref,
 	},
@@ -19,6 +19,8 @@ use {
 #[derive(Debug, PartialEq, Default)]
 pub struct TomlTable<'a> {
 	pub(crate) map: HashMap<CowSpan<'a>, TomlValue<'a>>,
+	/// Used internally to track if a TOML table was defined multiple times.
+	pub(crate) defined: bool,
 }
 impl<'a> TomlTable<'a> {
 	/// Gets the value for a key, if that value is a table.
@@ -84,11 +86,11 @@ impl<'a> TomlTable<'a> {
 		}
 	}
 	/// Gets the value for a key, if that value is an array.
-	pub fn get_array(&self, key: &str) -> Result<&Vec<TomlValue<'a>>, TomlGetError<'_, 'a>> {
+	pub fn get_array(&self, key: &str) -> Result<&TomlArray<'a>, TomlGetError<'_, 'a>> {
 		match self.get(key) {
 			None => Err(TomlGetError::InvalidKey),
 			Some(ref val) => {
-				if let TomlValue::Array(array, _) = val {
+				if let TomlValue::Array(array) = val {
 					Ok(array)
 				} else {
 					Err(TomlGetError::TypeMismatch(val, val.ty()))

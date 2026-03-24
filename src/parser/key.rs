@@ -2,10 +2,10 @@
 
 use {
 	crate::{
+		TomlError, TomlErrorKind,
 		table::TomlTable,
 		text::{CowSpan, Text},
 		types::TomlValue,
-		TomlError, TomlErrorKind,
 	},
 	std::{collections::hash_map::Entry, hint::unreachable_unchecked},
 };
@@ -40,6 +40,7 @@ pub fn parse_key<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, TomlError<'a>> 
 	Ok(CowSpan::Raw(key))
 }
 
+/// Parses a potentially nested key (i.e. a key that has dots, such as `table.subtable`).
 pub fn parse_nested<'a, 't>(
 	text: &mut Text<'a>,
 	mut root: &'t mut TomlTable<'a>,
@@ -61,7 +62,7 @@ pub fn parse_nested<'a, 't>(
 		if let Entry::Occupied(entry) = entry {
 			root = match entry.into_mut() {
 				TomlValue::Table(table) => table,
-				TomlValue::Array(array, true) => {
+				TomlValue::Array(array) if array.is_array_of_tables => {
 					let Some(TomlValue::Table(table)) = array.last_mut() else {
 						unreachable!()
 					};

@@ -1,6 +1,6 @@
 # BOML
 
-A dead-simple, efficient, dependency-free TOML parser for Rust.
+A dead-simple, efficient, dependency-free TOML parser for Rust. Supports TOML 1.1.
 
 *Special thanks to [cubic](https://github.com/ucubic) and [Speykious](https://github.com/speykious) for their help while developing BOML!*
 
@@ -14,7 +14,7 @@ BOML requires no imports - just call `boml::parse` with the TOML source code, th
 
 ```rust
 fn parse_cargo_toml() {
-	let source = include_str!("../Cargo.toml");
+	let source = include_str!("Cargo.toml");
 	let toml = boml::parse(source).unwrap();
 
 	// Get the package table from the `Cargo.toml` file
@@ -29,7 +29,7 @@ In the above snippet, we used `get_table` to read a value, because we knew the v
 ```rust
 use boml::prelude::TomlValue;
 
-let source = include_str!("../Cargo.toml");
+let source = include_str!("Cargo.toml");
 let toml = boml::parse(source).unwrap();
 
 // Specific types via `.get_<type>`
@@ -60,7 +60,7 @@ You can also determine a value's type without touching its data, via the `.ty()`
 ```rust
 use boml::prelude::TomlValueType;
 
-let source = include_str!("../Cargo.toml");
+let source = include_str!("Cargo.toml");
 let toml = boml::parse(source).unwrap();
 
 let package = toml.get("package").unwrap();
@@ -69,19 +69,11 @@ assert_eq!(package.ty(), TomlValueType::Table);
 
 ## Error Handling
 
-There are 2 sources of errors in BOML: A parsing error, or an error from one of
-the `get_<type>` methods. These use the `TomlError` and `TomlGetError` types,
-respectively.
+There are 2 sources of errors in BOML: A parsing error, or an error from one of the `get_<type>` methods. These use the `TomlError` and `TomlGetError` types, respectively.
 
-`TomlError`, the parsing error type, stores the span of text where the parsing
-error occurred, and a `TomlErrorKind` which describes the type of error at that
-span. Printing the error will show the error kind and the region of TOML that had the error.
+`TomlError`, the parsing error type, stores the span of text where the parsing error occurred, and a `TomlErrorKind` which describes the type of error at that span. Printing the error will show the error kind and the region of TOML that had the error.
 
-`TomlGetError` is an error from one of the `get_<type>` methods in tables. It
-occurs when there's no value for the provided key (`InvalidKey`) or when the
-types aren't the same (`TypeMismatch` - could happen if, for example, you try
-to get a `String` value with `get_table`). A `TypeMismatch` error stores the
-actual TOML value and its type, so you can still attempt to use it if possible.
+`TomlGetError` is an error from one of the `get_<type>` methods in tables. It occurs when there's no value for the provided key (`InvalidKey`) or when the types aren't the same (`TypeMismatch` - could happen if, for example, you try to get a `String` value with `get_table`). A `TypeMismatch` error stores the actual TOML value and its type, so you can still attempt to use it if possible.
 
 
 
@@ -93,25 +85,23 @@ The *only* guarantee BOML makes about date/time values is that they are formatte
 
 You should pass date/time values parsed with BOML to another crate - such as [chrono](https://docs.rs/chrono/latest/chrono/) or [jiff](https://docs.rs/jiff/latest/jiff/) - before actually using them.
 
-If you enable the crate feature `chrono`, BOML will provide `From` and `Into` implementations to convert TOML date/time types into Chrono date/time types.
+If you enable the crate feature `chrono`, BOML will provide `From` and `Into` implementations to convert TOML date/time types into Chrono date/time types for you.
 
 
 
 # TOML Compliance
 
-BOML passes all valid tests cases of the [official TOML test suite](https://github.com/toml-lang/toml-test) for TOML 1.0.
+BOML passes all valid tests cases of the [official TOML test suite](https://github.com/toml-lang/toml-test) for TOML 1.1.
 
-BOML does parse some invalid test cases without erroring, meaning it may parse something that's technically invalid TOML as valid TOML.
+BOML does parse some invalid test cases without erroring, meaning it may parse something that's technically invalid TOML as valid TOML. Generally these are weird edge cases you're unlikely to actually encounter (e.g. `\r` in a comment).
 
 To run BOML against the TOML test suite yourself, see [tests/toml_test.rs](tests/toml_test.rs).
-
-TOML 1.1 is not currently supported, but support for it will be added if it's released.
 
 
 
 # Efficiency
 
-BOML aims to be very fast. On a Framework 16, BOML parses the entire TOML test suite - ~1.8k lines of TOML - in ~.003 seconds. You can run this benchmark yourself with `cargo +nightly t toml_test_speed --release -- -Zunstable-options --report-time --ignored`.
+BOML aims to be very fast. On a Framework 16, BOML parses the entire TOML test suite - ~2.1k lines of TOML - in ~.008 seconds. See [tests/toml_test.rs](tests/toml_test.rs) for more info.
 
 Here's some more in-depth details on BOML's efficiency:
 
@@ -127,7 +117,7 @@ Here's some more in-depth details on BOML's efficiency:
 # To-Do
 
 - Support for serializing TOML
-- `no_std` support? Currently only allocated types from the standard library are used, so it should be possible
+- `no_std` support? Currently only allocated types from the standard library are used, so it should be possible, though boml will have to pull in a hashmap implementation
 - Improve error messages to be more like rustc or <https://github.com/brendanzab/codespan>
 
 

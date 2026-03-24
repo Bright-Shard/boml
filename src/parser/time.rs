@@ -1,7 +1,7 @@
 use crate::{
+	TomlError, TomlErrorKind,
 	text::Text,
 	types::{OffsetTomlDateTime, TomlDate, TomlDateTime, TomlOffset, TomlTime, TomlValue},
-	TomlError, TomlErrorKind,
 };
 
 fn parse_two_digits(text: &mut Text) -> Option<u8> {
@@ -131,19 +131,20 @@ pub fn parse_time<'a>(
 			kind: TomlErrorKind::TimeMissingMinute,
 		});
 	};
-	if text.current_byte() != Some(b':') {
-		return Err(TomlError {
-			src: text.excerpt_to_idx(start..),
-			kind: TomlErrorKind::TimeMissingColon,
-		});
-	}
-	text.next();
 
-	let Some(second) = parse_two_digits(text) else {
-		return Err(TomlError {
-			src: text.excerpt_to_idx(start..),
-			kind: TomlErrorKind::TimeMissingSecond,
-		});
+	let second = if text.current_byte() == Some(b':') {
+		text.next();
+
+		let Some(second) = parse_two_digits(text) else {
+			return Err(TomlError {
+				src: text.excerpt_to_idx(start..),
+				kind: TomlErrorKind::TimeMissingSecond,
+			});
+		};
+
+		second
+	} else {
+		0
 	};
 
 	let nanosecond = if text.current_byte() == Some(b'.') {

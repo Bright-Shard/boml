@@ -2,7 +2,12 @@
 
 use std::f64;
 
-use crate::{table::TomlTable, text::Text, types::TomlValue, TomlError, TomlErrorKind};
+use crate::{
+	TomlError, TomlErrorKind,
+	table::TomlTable,
+	text::Text,
+	types::{TomlArray, TomlValue},
+};
 
 pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, TomlError<'a>> {
 	match text.current_byte() {
@@ -13,7 +18,10 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, TomlError<'
 			let start = text.idx();
 			text.next();
 
-			let mut array = Vec::new();
+			let mut array = TomlArray {
+				values: Vec::new(),
+				is_array_of_tables: false,
+			};
 
 			loop {
 				text.skip_whitespace();
@@ -27,7 +35,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, TomlError<'
 					});
 				}
 
-				array.push(parse_value(text)?);
+				array.values.push(parse_value(text)?);
 				text.skip_whitespace();
 
 				match text.current_byte() {
@@ -40,19 +48,19 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, TomlError<'
 						return Err(TomlError {
 							src: text.excerpt_before_idx(start..),
 							kind: TomlErrorKind::UnclosedArrayBracket,
-						})
+						});
 					}
 					_ => {
 						return Err(TomlError {
 							src: text.excerpt_to_idx(start..),
 							kind: TomlErrorKind::UnclosedArrayBracket,
-						})
+						});
 					}
 				}
 				text.skip_whitespace();
 			}
 
-			Ok(TomlValue::Array(array, false))
+			Ok(TomlValue::Array(array))
 		}
 		Some(b'{') => {
 			let start = text.idx();
@@ -97,7 +105,7 @@ pub fn parse_value<'a>(text: &mut Text<'a>) -> Result<TomlValue<'a>, TomlError<'
 						return Err(TomlError {
 							src: text.excerpt_before_idx(start..),
 							kind: TomlErrorKind::UnclosedInlineTableBracket,
-						})
+						});
 					}
 					_ => {
 						return Err(TomlError {

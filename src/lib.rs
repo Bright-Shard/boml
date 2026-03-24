@@ -16,7 +16,7 @@ use {
 };
 
 /// Attempts to parse the given TOML.
-pub fn parse(str: &str) -> Result<Toml<'_>, TomlError> {
+pub fn parse<'a>(str: &'a str) -> Result<Toml<'a>, TomlError<'a>> {
 	parser::parse_str(str)
 }
 
@@ -173,8 +173,11 @@ pub enum TomlErrorKind {
 /// Types that may be useful to have imported while using BOML.
 pub mod prelude {
 	pub use crate::{
-		table::{TomlGetError, TomlTable},
-		types::{TomlValue, TomlValueType},
 		Toml, TomlError, TomlErrorKind,
+		table::{TomlGetError, TomlTable},
+		types::{
+			OffsetTomlDateTime, TomlArray, TomlDate, TomlDateTime, TomlOffset, TomlTime, TomlValue,
+			TomlValueType,
+		},
 	};
 }

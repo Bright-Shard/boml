@@ -1,10 +1,10 @@
 use std::{collections::hash_map::Entry, hint::unreachable_unchecked};
 
 use crate::{
+	Toml, TomlError, TomlErrorKind,
 	table::TomlTable,
 	text::Text,
-	types::{TomlValue, TomlValueType},
-	Toml, TomlError, TomlErrorKind,
+	types::{TomlArray, TomlValue, TomlValueType},
 };
 
 pub mod inline_table;
@@ -14,7 +14,7 @@ pub mod string;
 pub mod time;
 pub mod value;
 
-pub fn parse_str(str: &str) -> Result<Toml<'_>, TomlError> {
+pub fn parse_str<'a>(str: &'a str) -> Result<Toml<'a>, TomlError<'a>> {
 	let mut txt = Text::new(str);
 	let mut root = TomlTable::default();
 
@@ -60,18 +60,27 @@ pub fn parse<'a>(
 					text.skip_whitespace();
 
 					let entry = table.map.entry(key.clone());
+					match entry {
+						Entry::Vacant(_) => {}
+						Entry::Occupied(ref o)
+							if o.get().as_array().is_some_and(|a| a.is_array_of_tables) => {}
+						_ => {
+							return Err(TomlError {
+								src: text.excerpt_before_idx(start..),
+								kind: TomlErrorKind::ReusedKey,
+							});
+						}
+					}
+					let TomlValue::Array(array) = entry.or_insert(TomlValue::Array(TomlArray {
+						values: Vec::new(),
+						is_array_of_tables: true,
+					})) else {
+						unreachable!()
+					};
 
 					let mut table = TomlTable::default();
 					parse(text, &mut table, false)?;
-
-					let value_entry = entry.or_insert(TomlValue::Array(Vec::new(), true));
-					let TomlValue::Array(ref mut array, _) = value_entry else {
-						return Err(TomlError {
-							src: text.excerpt_before_idx(start..),
-							kind: TomlErrorKind::ReusedKey,
-						});
-					};
-					array.push(TomlValue::Table(table));
+					array.values.push(TomlValue::Table(table));
 				} else {
 					text.next();
 					text.skip_whitespace();
@@ -91,12 +100,20 @@ pub fn parse<'a>(
 							return Err(TomlError {
 								src: text.excerpt_to_idx(start..),
 								kind: TomlErrorKind::ReusedKey,
-							})
+							});
 						}
 					};
 					let TomlValue::Table(table) = table else {
 						unsafe { unreachable_unchecked() }
 					};
+
+					if table.defined {
+						return Err(TomlError {
+							src: text.absolute_excerpt(start..text.idx()),
+							kind: TomlErrorKind::ReusedKey,
+						});
+					}
+					table.defined = true;
 
 					text.skip_whitespace();
 

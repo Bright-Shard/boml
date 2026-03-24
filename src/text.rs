@@ -203,7 +203,7 @@ impl<'a> Span<'a> {
 
 	#[inline]
 	pub fn try_as_str(&self) -> Option<&'a str> {
-		Some(&self.source.get(self.start..=self.end)?)
+		self.source.get(self.start..=self.end)
 	}
 	/// A string covering just the bytes within this span.
 	#[inline]
@@ -229,8 +229,8 @@ impl CowSpan<'_> {
 	#[inline]
 	pub fn as_str(&self) -> &str {
 		match self {
-			Self::Raw(ref raw) => &raw.source[raw.start..=raw.end],
-			Self::Modified(_, ref modified) => modified,
+			Self::Raw(raw) => &raw.source[raw.start..=raw.end],
+			Self::Modified(_, modified) => modified,
 		}
 	}
 
@@ -238,8 +238,8 @@ impl CowSpan<'_> {
 	#[inline]
 	pub fn span(&self) -> &Span<'_> {
 		match self {
-			Self::Raw(ref span) => span,
-			Self::Modified(ref span, _) => span,
+			Self::Raw(span) => span,
+			Self::Modified(span, _) => span,
 		}
 	}
 }

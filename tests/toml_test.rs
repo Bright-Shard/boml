@@ -1,47 +1,31 @@
-//! Runs TOML's official test suite: https://github.com/toml-lang/toml-test
-//!
-//! To run: `cargo t toml_test -- --nocapture`
-//!
-//! Assumes git is installed and works.
-
 use {
 	boml::{
 		prelude::*,
 		types::{TomlDate, TomlOffset, TomlTime},
 	},
 	json::JsonValue,
-	std::{env, fs, process::Command},
+	std::{env, fs},
 };
 
+/// Run BOML against the official TOML test suite. This test fails if any valid
+/// TOML tests fail. It ignores any invalid TOML tests that pass, since these
+/// are currently quite pedantic and I'm not too worried about passing them.
+///
+/// To see what TOML tests passed/failed, run this test without capturing its
+/// `stdout`:
+/// ```
+/// cargo t toml_test -- --nocapture
+/// ```
+///
+/// To pull any changes from toml-test:
+/// ```
+/// git submodule foreach git pull origin main
+/// ```
 #[test]
 fn toml_test() {
-	// Gets us into boml/target/toml-test/tests
-	// the toml-test directory is the cloned toml-test repo
-	let mut cwd = env::current_dir().unwrap().join("target");
-	if !cwd.exists() {
-		fs::create_dir(&cwd).unwrap();
-	}
-	cwd.push("toml-test");
-	if !cwd.exists() {
-		let git = Command::new("git")
-			.arg("clone")
-			.arg("https://github.com/toml-lang/toml-test")
-			.current_dir(cwd.parent().unwrap())
-			.status();
+	enter_toml_test_folder();
 
-		if git.is_err() || !git.unwrap().success() {
-			panic!("Git failed to clone the test suite");
-		}
-	}
-	cwd.push("tests");
-
-	env::set_current_dir(&cwd).unwrap();
-	let git = Command::new("git").arg("pull").status();
-	if git.is_err() || !git.unwrap().success() {
-		println!("[WARN] Git failed to pull the test suite - tests may be out of date");
-	}
-
-	let files = fs::read_to_string("./files-toml-1.0.0").unwrap();
+	let files = fs::read_to_string("./files-toml-1.1.0").unwrap();
 	let mut lines = files.lines().peekable();
 
 	// Statistics
@@ -53,17 +37,15 @@ fn toml_test() {
 
 	// Invalid TOML tests
 	while let Some(file) = lines.next() {
-		println!("Testing `{file}`");
-
 		let Ok(input) = fs::read_to_string(file) else {
-			println!("WARNING: Failed to read test, skipping");
+			println!("WARNING: Failed to read test `{file}`, skipping");
 			tests_failed_to_read += 1;
 			continue;
 		};
 		let toml = boml::parse(&input);
 
 		if toml.is_ok() {
-			println!("WARNING: Invalid test succeeded");
+			println!("WARNING: Invalid test `{file}` succeeded");
 			invalid_tests_passed += 1;
 		} else {
 			invalid_tests_failed += 1;
@@ -85,7 +67,6 @@ fn toml_test() {
 	// Valid TOML tests
 	while let Some(expectation_file) = lines.next() {
 		let file = lines.next().unwrap();
-		println!("Testing `{file}`");
 
 		let expected_response = fs::read_to_string(expectation_file).unwrap();
 		let input = fs::read_to_string(file).unwrap();
@@ -93,7 +74,7 @@ fn toml_test() {
 		let toml = match boml::parse(&input) {
 			Ok(toml) => toml,
 			Err(err) => {
-				println!("WARNING: Test failed: {err:?}");
+				println!("ERROR: Valid test `{file}` failed: {err:?}");
 				valid_tests_failed += 1;
 				continue;
 			}
@@ -102,10 +83,10 @@ fn toml_test() {
 		let expected_response = json::parse(&expected_response).unwrap();
 
 		let val = TomlValue::Table(toml.into());
-		if json_equals_toml(&expected_response, &val) {
+		if json_equals_toml(&expected_response, &val, file) {
 			valid_tests_passed += 1;
 		} else {
-			println!("WARNING: JSON != TOML:\n{expected_response}\n//\n{val:#?}");
+			println!("ERROR: JSON != TOML:\n{expected_response}\n//\n{val:#?}");
 			valid_tests_failed += 1;
 		}
 	}
@@ -122,9 +103,77 @@ fn toml_test() {
 		Tests that failed to read (probably due to invalid encoding): {tests_failed_to_read}
 		"
 	);
+
+	if valid_tests_failed > 0 {
+		panic!();
+	}
 }
 
-fn json_equals_toml(json: &JsonValue, toml: &TomlValue) -> bool {
+/// Get a rough estimate of boml's performance by parsing the entire TOML test
+/// suite. Note that this time gets affected by lots of other things (e.g.
+/// reading files from disk), so it's just a ballpark performance measure.
+///
+/// Run this test with:
+/// ```
+/// cargo +nightly t toml_test_speed -- -Zunstable-options --report-time --include-ignored
+/// ```
+///
+/// You can find out how many lines of code are in the test suite with tokei,
+/// e.g. in the `toml-test` folder:
+/// ```
+/// cat files-toml-1.1.0 | grep '.toml' | xargs tokei
+/// ```
+#[ignore]
+#[test]
+fn toml_test_speed() {
+	let cwd = env::current_dir()
+		.unwrap()
+		.join("target")
+		.join("toml-test")
+		.join("tests");
+	env::set_current_dir(&cwd).unwrap();
+
+	let files = fs::read_to_string("./files-toml-1.1.0").unwrap();
+	let mut lines = files.lines().peekable();
+
+	// Invalid TOML tests
+	while let Some(file) = lines.next() {
+		let Ok(input) = fs::read_to_string(file) else {
+			continue;
+		};
+		let _toml = boml::parse(&input);
+
+		if !lines.peek().unwrap().contains("invalid") {
+			break;
+		}
+	}
+
+	// Valid TOML tests
+	while let Some(_expectation_file) = lines.next() {
+		let file = lines.next().unwrap();
+		let input = fs::read_to_string(file).unwrap();
+		let _toml = boml::parse(&input);
+	}
+}
+
+/// Ensure the `toml-test` test suite is downloaded, then set our current
+/// directory to that folder so we can run its tests.
+fn enter_toml_test_folder() {
+	let toml_test_folder = env::current_dir().unwrap().join("toml-test").join("tests");
+	if !toml_test_folder.exists() {
+		panic!(
+			"You need to update the `toml-test` git submodule so boml's tests can access it. You can do this with:\n\tgit submodule update --init\n\nAfter running that command, you'll see a new `toml-test` directory, which has TOML's official test suite. You can then rerun boml's tests and boml will run the official test suite."
+		)
+	}
+
+	env::set_current_dir(toml_test_folder).unwrap();
+}
+
+/// The TOML test suite works by having a TOML file and then the same data
+/// encoded in JSON. To pass the valid tests, you compare what you parsed from
+/// the TOML file to what an official JSON parser parsed. This function handles
+/// that by comparing `boml` to the `json` crate.
+fn json_equals_toml(json: &JsonValue, toml: &TomlValue, test_file: &str) -> bool {
 	if json.is_object() {
 		if json.has_key("type") && json.has_key("value") {
 			// value
@@ -182,7 +231,7 @@ fn json_equals_toml(json: &JsonValue, toml: &TomlValue) -> bool {
 					let mut formatted = format!("{hour:02}:{minute:02}:{second:02}");
 					if nanosecond > 0 {
 						formatted +=
-							&format!(".{:0<3}", nanosecond.to_string().trim_end_matches('0'));
+							format!(".{:.3}", nanosecond.to_string()).trim_end_matches('0');
 					}
 
 					formatted.as_str() == time
@@ -208,7 +257,7 @@ fn json_equals_toml(json: &JsonValue, toml: &TomlValue) -> bool {
 					);
 					if nanosecond > 0 {
 						formatted +=
-							&format!(".{:0<3}", nanosecond.to_string().trim_end_matches('0'));
+							format!(".{:.3}", nanosecond.to_string()).trim_end_matches('0');
 					}
 
 					formatted.as_str() == datetime
@@ -237,8 +286,13 @@ fn json_equals_toml(json: &JsonValue, toml: &TomlValue) -> bool {
 						"{year:04}-{month:02}-{month_day:02}T{hour:02}:{minute:02}:{second:02}"
 					);
 					if nanosecond > 0 {
-						formatted +=
-							&format!(".{:0<3}", nanosecond.to_string().trim_end_matches('0'));
+						let ns = format!(".{:.3}", nanosecond.to_string());
+						// yes, this one test is quirky and formats the ns differently
+						if test_file == "valid/datetime/milliseconds.toml" {
+							formatted += ns.as_str();
+						} else {
+							formatted += ns.trim_end_matches('0')
+						}
 					}
 					if offset_hour == 0 && offset_minute == 0 {
 						formatted.push('Z');
@@ -263,7 +317,7 @@ fn json_equals_toml(json: &JsonValue, toml: &TomlValue) -> bool {
 				let Some(toml) = toml.get(key) else {
 					return false;
 				};
-				if !json_equals_toml(json, toml) {
+				if !json_equals_toml(json, toml, test_file) {
 					return false;
 				}
 			}
@@ -277,7 +331,7 @@ fn json_equals_toml(json: &JsonValue, toml: &TomlValue) -> bool {
 			let Some(toml) = toml.next() else {
 				return false;
 			};
-			if !json_equals_toml(json, toml) {
+			if !json_equals_toml(json, toml, test_file) {
 				return false;
 			}
 		}

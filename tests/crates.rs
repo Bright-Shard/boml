@@ -10,7 +10,7 @@ fn boml() {
 
 	let package = toml.get_table("package").unwrap();
 	assert_eq!(package.get_string("name").unwrap(), "boml");
-	assert_eq!(package.get_string("edition").unwrap(), "2021");
+	assert_eq!(package.get_string("edition").unwrap(), "2024");
 
 	let dev_deps = toml.get_table("dev-dependencies").unwrap();
 	let ureq = dev_deps.get_table("ureq").unwrap();

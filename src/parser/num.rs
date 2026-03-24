@@ -1,5 +1,5 @@
 use {
-	crate::{text::Text, types::TomlValue, TomlError, TomlErrorKind},
+	crate::{TomlError, TomlErrorKind, text::Text, types::TomlValue},
 	core::mem::MaybeUninit,
 };
 
@@ -64,14 +64,14 @@ pub fn parse_number<'a>(
 						match (text.idx() - start, byte) {
 							(2, b':') => {
 								return crate::parser::time::parse_time(num as u8, start, text)
-									.map(TomlValue::Time)
+									.map(TomlValue::Time);
 							}
 							(4, b'-') => return crate::parser::time::parse_date(num, start, text),
 							_ => {
 								return Err(TomlError {
 									src: text.excerpt_to_idx(start..),
 									kind: TomlErrorKind::NumberHasLeadingZero,
-								})
+								});
 							}
 						}
 					}
@@ -148,7 +148,7 @@ pub fn parse_number<'a>(
 						return Err(TomlError {
 							src: text.excerpt_to_idx(start..),
 							kind: TomlErrorKind::NumberTooLarge,
-						})
+						});
 					}
 				};
 				running_num = match running_num.checked_sub((other - b'0') as i64) {
@@ -157,7 +157,7 @@ pub fn parse_number<'a>(
 						return Err(TomlError {
 							src: text.excerpt_to_idx(start..),
 							kind: TomlErrorKind::NumberTooLarge,
-						})
+						});
 					}
 				};
 			}
@@ -206,7 +206,7 @@ fn parse_int_with_base<'a, const BASE: i64>(
 					return Err(TomlError {
 						src: text.excerpt_to_idx(start..),
 						kind: TomlErrorKind::NumberTooLarge,
-					})
+					});
 				}
 			};
 			running_int = match running_int.checked_sub(num) {
@@ -215,7 +215,7 @@ fn parse_int_with_base<'a, const BASE: i64>(
 					return Err(TomlError {
 						src: text.excerpt_to_idx(start..),
 						kind: TomlErrorKind::NumberTooLarge,
-					})
+					});
 				}
 			}
 		}
@@ -316,8 +316,7 @@ fn parse_float<'a>(
 		remaining[0] = byte;
 		remaining = &mut remaining[1..];
 	}
-	let remaining_len = remaining.len();
-	let len = BUFFER_SIZE - remaining_len;
+	let len = BUFFER_SIZE - remaining.len();
 
 	let slice = unsafe { core::slice::from_raw_parts(stack_buffer.as_ptr() as *const u8, len) };
 	let str = unsafe { std::str::from_utf8_unchecked(slice) };
