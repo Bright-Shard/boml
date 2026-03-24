@@ -16,6 +16,11 @@ use {
 /// ```
 /// cargo t toml_test -- --nocapture
 /// ```
+///
+/// To pull any changes from toml-test:
+/// ```
+/// git submodule foreach git pull origin main
+/// ```
 #[test]
 fn toml_test() {
 	enter_toml_test_folder();
