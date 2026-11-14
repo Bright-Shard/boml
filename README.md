@@ -1,3 +1,11 @@
+# Moved to Codeberg
+
+I am leaving this repo here because BOML is depended on by some projects. However, this repo will no longer be updated. BOML now lives at Codeberg, with the rest of my projects.
+
+<https://codeberg.org/brightshard/boml>
+
+---
+
 # BOML
 
 A dead-simple, efficient, dependency-free TOML parser for Rust. Supports TOML 1.1.
