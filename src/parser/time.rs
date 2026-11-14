@@ -122,7 +122,12 @@ pub fn parse_time<'a>(
 	start: usize,
 	text: &mut Text<'a>,
 ) -> Result<TomlTime, TomlError<'a>> {
-	debug_assert_eq!(text.current_byte(), Some(b':'));
+	if text.current_byte() != Some(b':') {
+		return Err(TomlError {
+			src: text.local_excerpt(..text.idx() + 1),
+			kind: TomlErrorKind::TimeMissingColon,
+		});
+	}
 	text.next();
 
 	let Some(minute) = parse_two_digits(text) else {
