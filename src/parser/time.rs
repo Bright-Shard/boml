@@ -30,7 +30,6 @@ pub fn parse_date<'a>(
 	start: usize,
 	text: &mut Text<'a>,
 ) -> Result<TomlValue<'a>, TomlError<'a>> {
-	debug_assert_eq!(text.current_byte(), Some(b'-'));
 	text.next();
 
 	let Some(month) = parse_two_digits(text) else {

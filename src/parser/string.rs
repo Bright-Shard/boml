@@ -30,8 +30,6 @@ fn string_escape<'a, const MULTILINE: bool>(
 	string: &mut Vec<u8>,
 	text: &mut Text<'a>,
 ) -> Result<(), TomlError<'a>> {
-	debug_assert_eq!(text.current_byte(), Some(b'\\'));
-
 	let start = text.idx();
 	text.next();
 
@@ -161,8 +159,6 @@ fn string_escape<'a, const MULTILINE: bool>(
 }
 
 pub fn parse_basic_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, TomlError<'a>> {
-	debug_assert_eq!(text.current_byte(), Some(b'"'));
-
 	text.next();
 	let start = text.idx();
 
@@ -203,8 +199,6 @@ pub fn parse_basic_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, TomlEr
 	})
 }
 pub fn parse_multiline_basic_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'a>, TomlError<'a>> {
-	debug_assert_eq!(text.local_excerpt(..3).as_str(), "\"\"\"");
-
 	let start = text.idx();
 	text.next_n(3);
 	let mut string_start = start + 3;
@@ -268,8 +262,6 @@ pub fn parse_multiline_basic_string<'a>(text: &mut Text<'a>) -> Result<CowSpan<'
 }
 
 pub fn parse_literal_string<'a>(text: &mut Text<'a>) -> Result<Span<'a>, TomlError<'a>> {
-	debug_assert_eq!(text.current_byte(), Some(b'\''));
-
 	text.next();
 	let start = text.idx();
 
@@ -288,8 +280,6 @@ pub fn parse_literal_string<'a>(text: &mut Text<'a>) -> Result<Span<'a>, TomlErr
 	})
 }
 pub fn parse_multiline_literal_string<'a>(text: &mut Text<'a>) -> Result<Span<'a>, TomlError<'a>> {
-	debug_assert_eq!(text.local_excerpt(..3).as_str(), "'''");
-
 	let start = text.idx();
 	text.next_n(3);
 	let mut string_start = start + 3;
