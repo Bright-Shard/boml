@@ -74,7 +74,10 @@ fn toml_test() {
 		let toml = match boml::parse(&input) {
 			Ok(toml) => toml,
 			Err(err) => {
-				println!("ERROR: Valid test `{file}` failed: {err:?}");
+				println!(
+					"ERROR: Valid test `{file}` failed with err `{:?}`: {err:?}",
+					err.kind
+				);
 				valid_tests_failed += 1;
 				continue;
 			}
