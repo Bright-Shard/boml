@@ -16,7 +16,8 @@ pub struct Text<'a> {
 	idx: usize,
 }
 impl<'a> Text<'a> {
-	pub fn new(text: &'a str) -> Self {
+	pub fn new(mut text: &'a str) -> Self {
+		text = skip_bom(text);
 		Self { text, idx: 0 }
 	}
 
@@ -151,13 +152,11 @@ impl<'a> Text<'a> {
 		while let Some(byte) = self.current_byte() {
 			match byte {
 				b'\t' | b' ' | b'\n' | b'\r' => self.next(),
+				b'#' => {
+					self.skip_current_line();
+				}
 				_ => break,
 			}
-		}
-
-		if self.current_byte() == Some(b'#') {
-			self.skip_current_line();
-			self.skip_whitespace();
 		}
 	}
 	/// Skips past all ASCII whitespace, but not TOML comments.
@@ -279,4 +278,20 @@ impl Display for CowSpan<'_> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{}", self.as_str())
 	}
+}
+
+/// UTF-8 strings can start with a "Byte Order Mark", which actually serves no
+/// purpose in UTF-8 (it's only useful for UTF-16/32) and isn't recommended but
+/// is technically legal anyways.
+///
+/// This function skips it.
+///
+/// https://en.wikipedia.org/wiki/Byte_order_mark
+fn skip_bom(str: &str) -> &str {
+	let mut bytes = str.as_bytes();
+	if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+		bytes = &bytes[3..];
+	}
+
+	unsafe { std::str::from_utf8_unchecked(bytes) }
 }
