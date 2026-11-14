@@ -1,8 +1,12 @@
 {
-  pkgs ? import <nixpkgs> {}
+  pkgs ? import <nixpkgs> { },
 }:
 
 pkgs.mkShell {
   name = "boml-devshell";
-  packages = with pkgs; [ gcc ];
+
+  packages = with pkgs; [
+    gcc
+    rust-analyzer
+  ];
 }
